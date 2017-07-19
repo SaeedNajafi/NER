@@ -780,7 +780,7 @@ class NER(object):
                                                                         self.transition_params
                                                                         ]
                                                                      )
-
+                inner_results = []
                 for unary_scores_, sequence_length_ in zip(unary_scores, sequence_lengths):
                     # Remove padding.
                     unary_scores_ = unary_scores_[:sequence_length_]
@@ -790,8 +790,9 @@ class NER(object):
                                                                 transition_params
                                                             )
                     predicted_indices = viterbi_sequence
-                    results.append(predicted_indices)
-
+                    inner_results.append(predicted_indices)
+                
+                results.append(inner_results)
             else:
 
                 if np.any(tag_data):
