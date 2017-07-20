@@ -699,7 +699,7 @@ class NER(object):
                                 feed_dict=feed
                                 )
 
-                total_loss.append(loss)
+            total_loss.append(loss)
 
             ##
             if verbose and step % verbose == 0:
@@ -791,7 +791,7 @@ class NER(object):
                                                             )
                     predicted_indices = viterbi_sequence
                     inner_results.append(predicted_indices)
-                
+
                 results.append(inner_results)
             else:
 
