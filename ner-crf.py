@@ -769,7 +769,8 @@ class NER(object):
                                                                         self.preds,
                                                                         self.sentence_length_placeholder,
                                                                         self.transition_params
-                                                                        ]
+                                                                        ],
+									feed_dict=feed
                                                                      )
                     losses.append(loss)
                 else:
@@ -778,7 +779,8 @@ class NER(object):
                                                                         self.preds,
                                                                         self.sentence_length_placeholder,
                                                                         self.transition_params
-                                                                        ]
+                                                                        ],
+									feed_dict=feed
                                                                      )
                 inner_results = []
                 for unary_scores_, sequence_length_ in zip(unary_scores, sequence_lengths):
