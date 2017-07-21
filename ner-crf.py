@@ -22,7 +22,7 @@ class NER(object):
     tag_size = 9
     batch_size = 16
     dropout = 0.5
-    learning_rate = 0.0005
+    learning_rate = 0.001
     max_gradient_norm = 5.
     max_epochs = 24
     early_stopping = 2
@@ -644,7 +644,6 @@ class NER(object):
         self.train_op = self.add_training_op(self.loss)
         if not self.CRF:
             self.predictions = tf.nn.softmax(y)
-
     def run_epoch(
                 self,
                 session,
@@ -826,10 +825,9 @@ class NER(object):
                 ):
 
         """Saves predictions to the provided file."""
-
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
-                batch_predictions = predictions[batch_index]
+                batch_predictions = np.array(predictions[batch_index])
                 b_size = batch_predictions.shape[0]
                 for sentence_index in range(b_size):
                     for word_index in range(self.max_sentence_length):
@@ -969,8 +967,32 @@ def test_NER():
 
 		with tf.Session() as session:
             		session.run(init)
-            		saver.restore(session, './weights/ner.weights')
-           		print
+			print
+		        print 'Dev'
+            		start = time.time()
+            		dev_loss, predictions = model.predict(
+                                                session,
+                                                model.char_X_dev,
+                                                model.word_length_X_dev,
+                                                model.cap_X_dev,
+                                                model.word_X_dev,
+                                                model.mask_X_dev,
+                                                model.sentence_length_X_dev,
+                                                model.Y_dev
+                                                )
+
+            		print 'Dev loss: {}'.format(dev_loss)
+            		print 'Total test time: {} seconds'.format(time.time() - start)
+            		print 'Writing predictions to dev.predicted'
+            		model.save_predictions(
+                                predictions,
+                                model.sentence_length_X_dev,
+                                "dev.predicted",
+                                model.word_X_dev,
+                                model.Y_dev
+                                )
+
+            		print
             		print
             		print 'Test'
             		start = time.time()
@@ -978,7 +1000,7 @@ def test_NER():
                                                 session,
                                                 model.char_X_test,
                                                 model.word_length_X_test,
-                                                model_cap_X_test,
+                                                model.cap_X_test,
                                                 model.word_X_test,
                                                 model.mask_X_test,
                                                 model.sentence_length_X_test,
