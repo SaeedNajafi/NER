@@ -7,8 +7,10 @@ from numpy import *
 import numpy as np
 import pandas as pd
 
-def load_embeddings(vocabfile, vectorfile):
-    em = np.loadtxt(vectorfile, dtype=np.float32)
+def load_embeddings(vocabfile, vectorfile=None):
+    em = None
+    if(vectorfile is not None):
+        em = np.loadtxt(vectorfile, dtype=np.float32)
     with open(vocabfile) as fd:
         tokens = [line.strip() for line in fd]
     return em, tokens
@@ -157,7 +159,15 @@ def canonicalize_char(word, charset):
 
     return new_word
 
-def seq_to_sentences(unchanged_words, caps, words, tags, word_to_num, tag_to_num, char_to_num):
+def seq_to_sentences(
+        unchanged_words,
+        caps,
+        words,
+        tags,
+        word_to_num,
+        tag_to_num,
+        char_to_num):
+
     ns = len(words)
 
     Cap_X = []
@@ -202,7 +212,13 @@ def pad_sequence(seq, left=1, right=1):
 def flatten(lst):
     return list(itertools.chain.from_iterable(lst))
 
-def padding(char_data, cap_data, word_data, tag_data, max_sentence_length, max_word_length):
+def padding(
+        char_data,
+        cap_data,
+        word_data,
+        tag_data,
+        max_sentence_length,
+        max_word_length):
 
     cap_X = []
     word_X = []
@@ -270,7 +286,17 @@ def padding(char_data, cap_data, word_data, tag_data, max_sentence_length, max_w
         word_length_X.append(length)
         char_X.append(new_sentence)
 
-    return array(char_X), array(word_length_X), array(cap_X), array(word_X), array(mask_X), array(sentence_length_X), array(Y)
+    ret = {
+            'char_X': array(char_X),
+            'word_length_X': array(word_length_X),
+            'cap_X': array(cap_X),
+            'word_X': array(word_X),
+            'mask_X': array(mask_X),
+            'sentence_length_X': array(sentence_length_X),
+            'Y': array(Y)
+            }
+            
+    return
 
 def data_iterator(
         orig_char_X,

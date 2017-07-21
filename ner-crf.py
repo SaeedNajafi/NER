@@ -15,44 +15,46 @@ class NER(object):
     """
     word_embedding_size = 100
     char_embedding_size = 25
-    encoder_hidden_units = 100
+    word_hidden_units = 100
     char_hidden_units = 25
+
     max_sentence_length = 150
     max_word_length = 25
     tag_size = 9
+
     batch_size = 16
     dropout = 0.5
-    learning_rate = 0.001
+    learning_rate = 0.0001
     max_gradient_norm = 5.
     max_epochs = 24
     early_stopping = 2
+
     CRF = True
 
     #path to different files!
     word_dic_path = './data/glove_en_word_100_dic.txt'
     word_vectors_path = './data/glove_en_word_100_vectors.txt'
     char_dic_path = './data/en_char_dic.txt'
-    char_vectors_path = './data/en_char_vectors.txt'
     train_set_path = './data/eng.train.v1'
     dev_set_path = './data/eng.testa.v1'
     test_set_path = './data/eng.testb.v1'
 
     def load_data(self):
         """
-        Loads starter word vectors, char vectors,
-        and train/dev/test data.
+        Loads starter word vectors, creates random character vectors,
+        and loads train/dev/test data.
+
         """
 
         # Loads the starter word vectors
         print "INFO: Reading word embeddings!"
         self.word_vectors, words = ut.load_embeddings(
                                         self.word_dic_path,
-                                        self.word_vectors_path
-                                        )
+                                        self.word_vectors_path)
 
-	#Adding new words of the training set and their random vectors.
+        #Adding new words of the training set and their random vectors.
         new_words = []
-	temp_dic={}
+        temp_dic={}
         with open(self.train_set_path) as fd:
             for line in fd:
                 if re.match(r"-DOCSTART-.+", line) or (len(line.strip()) == 0):
@@ -60,46 +62,43 @@ class NER(object):
                 else:
                     word = line.strip().split("\t")[0]
                     if (word not in words) and (word.lower() not in words):
-                        if not any(ch.isdigit() for ch in word):
-				if word in temp_dic.keys():
-					temp_dic[word] += 1
-				else:
-					temp_dic[word] = 1
+                        if re.search(r'\d', word) is None:
+                            if word in temp_dic.keys():
+                                temp_dic[word] += 1
+                            else:
+                                temp_dic[word] = 1
 
-	for (each_new, count) in sorted(temp_dic.items(), key=lambda item:item[1]):
-		if count>1:
-			new_words.append(each_new)
+        for (new_word, count) in sorted(temp_dic.items(), key=lambda item:item[1]):
+            if count>1:
+                new_words.append(new_word)
 
         words = words + new_words
-        #used for initializing new word vectors!
+        #Initializing new word vectors!
         boundry = np.sqrt(np.divide(3.0, self.word_embedding_size))
         new_word_vectors = np.random.uniform(
                                 low=-boundry,
                                 high=boundry,
-                                size=(len(new_words), self.word_embedding_size)
-                                )
+                                size=(len(new_words), self.word_embedding_size))
 
         self.word_vectors = np.vstack([self.word_vectors, new_word_vectors])
-	self.num_to_word = dict(enumerate(words))
+        self.num_to_word = dict(enumerate(words))
         self.word_to_num = {v:k for k,v in self.num_to_word.iteritems()}
 
         # Load the starter char vectors
         print "INFO: Reading character embeddings!"
-        self.char_vectors, chars = ut.load_embeddings(
-                                        self.char_dic_path,
-                                        self.char_vectors_path
-                                        )
+        _, chars = ut.load_embeddings(
+                        self.char_dic_path,
+                        None)
 
         self.num_to_char = dict(enumerate(chars))
         self.char_to_num = {v:k for k,v in self.num_to_char.iteritems()}
 
         # For IOB and IOB2 format
-        tagnames = [
-        		'O', 'B-LOC', 'I-LOC',
-        		'B-ORG', 'I-ORG',
-			'B-PER','I-PER',
-			'B-MISC', 'I-MISC'
-        ]
+        tagnames = ['O', 'B-LOC', 'I-LOC',
+                    'B-ORG', 'I-ORG',
+                    'B-PER','I-PER',
+                    'B-MISC', 'I-MISC']
+
         self.num_to_tag = dict(enumerate(tagnames))
         self.tag_to_num = {v:k for k,v in self.num_to_tag.iteritems()}
 
@@ -110,24 +109,23 @@ class NER(object):
                                                                 docs,
                                                                 self.word_to_num,
                                                                 self.tag_to_num,
-                                                                self.char_to_num
-                                                                )
+                                                                self.char_to_num)
 
-        out0, out1, out2, out3, out4, out5, out6 = ut.padding(
-                                                        Char_X_train,
-                                                        Cap_X_train,
-                                                        Word_X_train,
-                                                        Y_train,
-                                                        self.max_sentence_length,
-                                                        self.max_word_length
-                                                        )
-        self.char_X_train = out0
-        self.word_length_X_train = out1
-        self.cap_X_train = out2
-        self.word_X_train = out3
-        self.mask_X_train = out4
-        self.sentence_length_X_train = out5
-        self.Y_train = out6
+        out = ut.padding(
+                        Char_X_train,
+                        Cap_X_train,
+                        Word_X_train,
+                        Y_train,
+                        self.max_sentence_length,
+                        self.max_word_length)
+
+        self.char_X_train = out['char_X']
+        self.word_length_X_train = out['word_length_X']
+        self.cap_X_train = out['cap_X']
+        self.word_X_train = out['word_X']
+        self.mask_X_train = out['mask_X']
+        self.sentence_length_X_train = out['sentence_length_X']
+        self.Y_train = out['Y']
 
         # Loads the dev set (for tuning hyperparameters)
         print "INFO: Reading dev data!"
@@ -136,26 +134,24 @@ class NER(object):
                                                         docs,
                                                         self.word_to_num,
                                                         self.tag_to_num,
-                                                        self.char_to_num,
-                                                        )
+                                                        self.char_to_num)
 
-        out0, out1, out2, out3, out4, out5, out6 = ut.padding(
-                                                        Char_X_dev,
-                                                        Cap_X_dev,
-                                                        Word_X_dev,
-                                                        Y_dev,
-                                                        self.max_sentence_length,
-                                                        self.max_word_length
-                                                        )
+        out = ut.padding(
+                        Char_X_dev,
+                        Cap_X_dev,
+                        Word_X_dev,
+                        Y_dev,
+                        self.max_sentence_length,
+                        self.max_word_length)
 
 
-        self.char_X_dev = out0
-        self.word_length_X_dev = out1
-        self.cap_X_dev = out2
-        self.word_X_dev = out3
-        self.mask_X_dev = out4
-        self.sentence_length_X_dev = out5
-        self.Y_dev = out6
+        self.char_X_dev = out['char_X']
+        self.word_length_X_dev = out['word_length_X']
+        self.cap_X_dev = out['cap_X']
+        self.word_X_dev = out['word_X']
+        self.mask_X_dev = out['mask_X']
+        self.sentence_length_X_dev = out['sentence_length_X']
+        self.Y_dev = out['Y']
 
         # Loads the test set
         print "INFO: Reading test data!"
@@ -164,24 +160,23 @@ class NER(object):
                                                             docs,
                                                             self.word_to_num,
                                                             self.tag_to_num,
-                                                            self.char_to_num,
-                                                            )
+                                                            self.char_to_num)
 
-        out0, out1, out2, out3, out4, out5, out6 = ut.padding(
-                                                        Char_X_test,
-                                                        Cap_X_test,
-                                                        Word_X_test,
-                                                        Y_test,
-                                                        self.max_sentence_length,
-							self.max_word_length
-                                                        )
-        self.char_X_test = out0
-        self.word_length_X_test = out1
-        self.cap_X_test = out2
-        self.word_X_test = out3
-        self.mask_X_test = out4
-        self.sentence_length_X_test = out5
-        self.Y_test = out6
+        out = ut.padding(
+                        Char_X_test,
+                        Cap_X_test,
+                        Word_X_test,
+                        Y_test,
+                        self.max_sentence_length,
+                        self.max_word_length)
+
+        self.char_X_test = out['char_X']
+        self.word_length_X_test = out['word_length_X']
+        self.cap_X_test = out['cap_X']
+        self.word_X_test = out['word_X']
+        self.mask_X_test = out['mask_X']
+        self.sentence_length_X_test = out['sentence_length_X']
+        self.Y_test = out['Y']
 
     def add_placeholders(self):
         """Generates placeholder variables to represent the input tensors
@@ -191,43 +186,35 @@ class NER(object):
         """
 
         self.char_input_placeholder = tf.placeholder(
-                                        tf.int32,
-                                        shape=(
-                                            None,
-                                            self.max_sentence_length,
-                                            self.max_word_length
-                                            )
-                                        )
+                                            tf.int32,
+                                            shape=(
+                                                None,
+                                                self.max_sentence_length,
+                                                self.max_word_length))
 
         self.word_length_placeholder = tf.placeholder(
-                                        tf.int32,
-                                        shape=(None, self.max_sentence_length)
-                                        )
+                                            tf.int32,
+                                            shape=(None, self.max_sentence_length))
 
         self.cap_input_placeholder = tf.placeholder(
                                         dtype=tf.int32,
-                                        shape=(None, self.max_sentence_length)
-                                        )
+                                        shape=(None, self.max_sentence_length))
 
         self.word_input_placeholder = tf.placeholder(
                                         dtype=tf.int32,
-                                        shape=(None, self.max_sentence_length)
-                                        )
+                                        shape=(None, self.max_sentence_length))
 
         self.word_mask_placeholder = tf.placeholder(
                                         dtype=tf.float32,
-                                        shape=(None, self.max_sentence_length)
-                                        )
+                                        shape=(None, self.max_sentence_length))
 
         self.sentence_length_placeholder = tf.placeholder(
-                                            dtype=tf.int32,
-                                            shape=(None,)
-                                            )
+                                                dtype=tf.int32,
+                                                shape=(None,))
 
         self.tag_placeholder = tf.placeholder(
                                     dtype=tf.int32,
-                                    shape=(None, self.max_sentence_length)
-                                    )
+                                    shape=(None, self.max_sentence_length))
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
@@ -252,34 +239,26 @@ class NER(object):
         }
         """
 
-        if tag_batch is None:
-            feed_dict={
-                self.char_input_placeholder: char_input_batch,
-                self.word_length_placeholder: word_length_batch,
-                self.cap_input_placeholder: cap_input_batch,
-                self.word_input_placeholder: word_input_batch,
-                self.word_mask_placeholder: word_mask_batch,
-                self.sentence_length_placeholder: sentence_length_batch,
-                self.dropout_placeholder: dropout_batch
-                }
-        else:
-            feed_dict={
-                self.char_input_placeholder: char_input_batch,
-                self.word_length_placeholder: word_length_batch,
-                self.cap_input_placeholder: cap_input_batch,
-                self.word_input_placeholder: word_input_batch,
-                self.word_mask_placeholder: word_mask_batch,
-                self.sentence_length_placeholder: sentence_length_batch,
-                self.tag_placeholder: tag_batch,
-                self.dropout_placeholder: dropout_batch
-                }
+        feed_dict={
+            self.char_input_placeholder: char_input_batch,
+            self.word_length_placeholder: word_length_batch,
+            self.cap_input_placeholder: cap_input_batch,
+            self.word_input_placeholder: word_input_batch,
+            self.word_mask_placeholder: word_mask_batch,
+            self.sentence_length_placeholder: sentence_length_batch,
+            self.dropout_placeholder: dropout_batch
+            }
+
+        if tag_batch is not None:
+            feed_dict[self.tag_placeholder] = tag_batch
 
         return feed_dict
 
     def add_embedding(self):
         """Add embedding layer that maps from vocabulary to vectors.
         """
-	#Capitilization lookup table
+
+        #Capitilization lookup table
         cap_lookup_table = tf.constant(
                                 [
                                     [1.0, 0.0, 0.0, 0.0],
@@ -288,47 +267,41 @@ class NER(object):
                                     [0.0, 0.0, 0.0, 1.0]
                                 ],
                                 name="cap_lookup_table",
-                                dtype=tf.float32
-                                )
+                                dtype=tf.float32)
 
         cap_embeddings = tf.nn.embedding_lookup(
                                 cap_lookup_table,
-                                self.cap_input_placeholder
-                                )
+                                self.cap_input_placeholder)
 
         word_lookup_table = tf.Variable(
                                	self.word_vectors,
                                 name="word_lookup_table",
-                                dtype=tf.float32
-                                )
+                                dtype=tf.float32)
 
         word_embeddings = tf.nn.embedding_lookup(
                                 word_lookup_table,
-                                self.word_input_placeholder
-                                )
+                                self.word_input_placeholder)
 
-	#update embeddings and embedding size to consider capatilization patterns.
+        #update embeddings and embedding size to consider capatilization patterns.
         word_embeddings = tf.concat([word_embeddings, cap_embeddings], axis=2)
         self.word_embedding_size += 4
 
-
-	boundry = np.sqrt(np.divide(3.0, self.char_embedding_size))
+        boundry = np.sqrt(np.divide(3.0, self.char_embedding_size))
         new_char_vectors = np.random.uniform(
                                 low=-boundry,
                                 high=boundry,
-                                size=(self.char_vectors.shape[0], self.char_embedding_size)
-                                )
+                                size=(
+                                    self.char_vectors.shape[0],
+                                    self.char_embedding_size))
 
-	character_lookup_table = tf.Variable(
+        character_lookup_table = tf.Variable(
                                     new_char_vectors,
-				    name="character_lookup_table",
-                                    dtype=tf.float32
-                                    )
+                                    name="character_lookup_table",
+                                    dtype=tf.float32)
 
         char_embeddings = tf.nn.embedding_lookup(
                                 character_lookup_table,
-                                self.char_input_placeholder
-                                )
+                                self.char_input_placeholder)
 
         return char_embeddings, word_embeddings
 
@@ -344,8 +317,14 @@ class NER(object):
         """
 
         sum_of_dimensions = tf.reduce_sum(shape)
-        epsilon = tf.cast( tf.sqrt( tf.divide(6, sum_of_dimensions) ), tf.float32 )
-        out = tf.random_uniform(shape, minval=-epsilon, maxval=epsilon, dtype=tf.float32)
+        epsilon = tf.cast(
+                        tf.sqrt( tf.divide(6, sum_of_dimensions) ),
+                        tf.float32)
+
+        out = tf.random_uniform(shape,
+                                minval=-epsilon,
+                                maxval=epsilon,
+                                dtype=tf.float32)
 
         return out
 
@@ -354,7 +333,8 @@ class NER(object):
         #current batch_size
         b_size = tf.shape(word_embeddings)[0]
 
-        char_embeddings_t = tf.reshape(char_embeddings, [-1, self.max_word_length, self.char_embedding_size])
+        char_embeddings_t = tf.reshape(char_embeddings,
+                            [-1, self.max_word_length, self.char_embedding_size])
         #character-level bidirectional rnns
         forward_char_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.char_hidden_units,
@@ -384,12 +364,15 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
+        sequence_length_reshaped = tf.reshape(
+                                    self.word_length_placeholder,
+                                    (b_size * self.max_sentence_length,))
 
         (char_h_fw, char_h_bw), _ = tf.nn.bidirectional_dynamic_rnn(
                                     forward_char_level_lstm,
                                     backward_char_level_lstm,
                                     char_embeddings_t,
-                                    sequence_length=tf.reshape(self.word_length_placeholder, (b_size * self.max_sentence_length,)),
+                                    sequence_length=sequence_length_reshaped,
                                     initial_state_fw=None,
                                     initial_state_bw=None,
                                     dtype=tf.float32,
@@ -400,24 +383,43 @@ class NER(object):
                                     )
 
         #select last outputs.
-        b_index = tf.reshape( tf.multiply(tf.range(0, b_size), self.max_word_length * self.max_sentence_length), (b_size, 1))
-        s_index = tf.reshape( tf.multiply(tf.range(0, self.max_sentence_length), self.max_word_length), (1, self.max_sentence_length))
-        index = tf.add(tf.add(b_index, s_index), tf.subtract(self.word_length_placeholder, 1))
-        fwd_char = tf.gather(tf.reshape(char_h_fw, [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]), index)
+        b_index = tf.reshape(
+                    tf.multiply(
+                    tf.range(0, b_size), self.max_word_length * self.max_sentence_length),
+                    (b_size, 1))
+
+        s_index = tf.reshape(
+                    tf.multiply(
+                    tf.range(0, self.max_sentence_length), self.max_word_length),
+                    (1, self.max_sentence_length))
+
+        index = tf.add(
+                    tf.add(b_index, s_index),
+                    tf.subtract(self.word_length_placeholder, 1))
+
+        fwd_char = tf.gather(
+                    tf.reshape(
+                        char_h_fw,
+                        [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
+                    index)
 
         #select first outputs.
         index = tf.add(b_index, s_index)
-        bck_char = tf.gather(tf.reshape(char_h_bw, [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]), index)
+        bck_char = tf.gather(
+                    tf.reshape(
+                        char_h_bw,
+                        [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
+                    index)
 
         """ combine character-level embeddings with word-level embeddings"""
         char_final_embeddings = tf.concat([fwd_char, bck_char], 2)
 
         t = tf.concat([char_final_embeddings, word_embeddings], 2)
-	final_embeddings = tf.nn.dropout(t, self.dropout_placeholder)
+        final_embeddings = tf.nn.dropout(t, self.dropout_placeholder)
 
-	#Creating context embeddings with respect to the windows size = 5
+        #Creating context embeddings with respect to the windows size = 5
         temp = []
-	zeros = tf.zeros((b_size, self.word_embedding_size +  2 * self.char_hidden_units), dtype=tf.float32)
+        zeros = tf.zeros((b_size, self.word_embedding_size +  2 * self.char_hidden_units), dtype=tf.float32)
         final_embeddings_t = tf.transpose(final_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index == 0:
@@ -428,6 +430,7 @@ class NER(object):
                 f5 = final_embeddings_t[time_index + 2]
                 new = tf.concat([f1, f2, f3, f4, f5], axis=1)
                 temp.append(new)
+
             elif time_index == 1:
                 f1 = zeros
                 f2 = final_embeddings_t[time_index - 1]
@@ -454,6 +457,7 @@ class NER(object):
                 f5 = zeros
                 new = tf.concat([f1, f2, f3, f4, f5], axis=1)
                 temp.append(new)
+
             else:
                 f1 = final_embeddings_t[time_index - 2]
                 f2 = final_embeddings_t[time_index - 1]
@@ -465,9 +469,9 @@ class NER(object):
 
         temp = tf.stack(temp, axis=1)
 
-	#apply dropout to whole context
+        #apply dropout to whole context
         forward_word_level_lstm = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.encoder_hidden_units,
+                                        num_units=self.word_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -481,7 +485,7 @@ class NER(object):
                                         )
 
         backward_word_level_lstm = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.encoder_hidden_units,
+                                        num_units=self.word_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -520,14 +524,14 @@ class NER(object):
         with tf.variable_scope("hidden"):
             U_hidden = tf.get_variable(
                             "U_hidden",
-                            (2 * self.encoder_hidden_units, self.encoder_hidden_units),
+                            (2 * self.word_hidden_units, self.word_hidden_units),
                             tf.float32,
                             self.xavier_initializer
                             )
 
             b_hidden = tf.get_variable(
                             "b_hidden",
-                            (self.encoder_hidden_units,),
+                            (self.word_hidden_units,),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
@@ -537,7 +541,7 @@ class NER(object):
                         tf.matmul(
                             tf.reshape(
                                 dropped_encoder_final_hs,
-                                (-1, 2  *  self.encoder_hidden_units)
+                                (-1, 2  *  self.word_hidden_units)
                             ),
                             U_hidden
                         ),
@@ -549,7 +553,7 @@ class NER(object):
         with tf.variable_scope("baseline"):
        		U_baseline = tf.get_variable(
                             "U_baseline",
-                            (self.encoder_hidden_units, self.tag_size),
+                            (self.word_hidden_units, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
@@ -566,7 +570,7 @@ class NER(object):
                         tf.matmul(
                             tf.reshape(
                                 outputs,
-                                (-1, self.encoder_hidden_units)
+                                (-1, self.word_hidden_units)
                             ),
                             U_baseline
                         ),
@@ -644,6 +648,7 @@ class NER(object):
         self.train_op = self.add_training_op(self.loss)
         if not self.CRF:
             self.predictions = tf.nn.softmax(y)
+
     def run_epoch(
                 self,
                 session,
@@ -675,7 +680,15 @@ class NER(object):
                     self.tag_size,
                     orig_Y
                     )
-        for step, (char_input_data, word_length_data, cap_input_data, word_input_data, word_mask_data, sentence_length_data, tag_data) in enumerate(data):
+        for step, (
+                    char_input_data,
+                    word_length_data,
+                    cap_input_data,
+                    word_input_data,
+                    word_mask_data,
+                    sentence_length_data,
+                    tag_data) in enumerate(data):
+
             feed = self.create_feed_dict(
                         char_input_batch=char_input_data,
                         word_length_batch=word_length_data,
@@ -715,7 +728,17 @@ class NER(object):
 
         return np.mean(total_loss)
 
-    def predict(self, session, char_X, word_length_X, cap_X, word_X, mask_X, sentence_length_X, Y=None):
+    def predict(
+            self,
+            session,
+            char_X,
+            word_length_X,
+            cap_X,
+            word_X,
+            mask_X,
+            sentence_length_X,
+            Y=None):
+
         """Make predictions from the provided model."""
 
         # If Y is given, the loss is also calculated
@@ -747,7 +770,14 @@ class NER(object):
                         self.tag_size,
                         None)
 
-        for step, (char_input_data, word_length_data, cap_input_data, word_input_data, word_mask_data, sentence_length_data, tag_data) in enumerate(data):
+        for step, (
+                    char_input_data,
+                    word_length_data,
+                    cap_input_data,
+                    word_input_data,
+                    word_mask_data,
+                    sentence_length_data,
+                    tag_data) in enumerate(data):
 
             feed = self.create_feed_dict(
                         char_input_batch=char_input_data,
