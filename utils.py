@@ -40,7 +40,7 @@ def docs_to_sentences(docs, word_to_num, tag_to_num, char_to_num):
     caps = [capalize_word(w) for w in words]
     words = [canonicalize_word(w, word_to_num) for w in words]
     tags = [t.split("|")[0] for t in tags]
-    iob2(tags)
+    tags = iob_iobes(tags)
     return seq_to_sentences(
                         unchanged_words,
                         caps,
@@ -50,6 +50,17 @@ def docs_to_sentences(docs, word_to_num, tag_to_num, char_to_num):
                         tag_to_num,
                         char_to_num
                         )
+
+def convert_to_iob(batch, num_to_tag, tag_to_num):
+	new_batch = []
+	for b_index in range(len(batch)):
+		sentence = batch[b_index]
+		new_sentence =[num_to_tag[w] for w in sentence]
+		new_sentence = iobes_iob(new_sentence)
+		new_sentence = [tag_to_num[w] for w in new_sentence]
+		new_batch.append(new_sentence)
+
+	return new_batch
 
 #https://github.com/glample/tagger/blob/master/utils.py
 def iobes_iob(tags):
@@ -296,7 +307,7 @@ def padding(
             'Y': array(Y)
             }
             
-    return
+    return ret
 
 def data_iterator(
         orig_char_X,

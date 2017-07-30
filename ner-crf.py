@@ -20,11 +20,11 @@ class NER(object):
 
     max_sentence_length = 150
     max_word_length = 25
-    tag_size = 9
+    tag_size = 17
 
     batch_size = 16
     dropout = 0.5
-    learning_rate = 0.0001
+    learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 24
     early_stopping = 2
@@ -92,12 +92,19 @@ class NER(object):
 
         self.num_to_char = dict(enumerate(chars))
         self.char_to_num = {v:k for k,v in self.num_to_char.iteritems()}
-
+	'''
         # For IOB and IOB2 format
         tagnames = ['O', 'B-LOC', 'I-LOC',
                     'B-ORG', 'I-ORG',
                     'B-PER','I-PER',
                     'B-MISC', 'I-MISC']
+	'''
+
+	# For IOBES format
+	tagnames = ['O', 'B-LOC', 'I-LOC', 'S-LOC', 'E-LOC',
+                    'B-ORG', 'I-ORG', 'S-ORG', 'E-ORG',
+                    'B-PER','I-PER', 'S-PER', 'E-PER',
+                    'B-MISC', 'I-MISC', 'S-MISC', 'E-MISC']
 
         self.num_to_tag = dict(enumerate(tagnames))
         self.tag_to_num = {v:k for k,v in self.num_to_tag.iteritems()}
@@ -291,7 +298,7 @@ class NER(object):
                                 low=-boundry,
                                 high=boundry,
                                 size=(
-                                    self.char_vectors.shape[0],
+                                    len(self.char_to_num),
                                     self.char_embedding_size))
 
         character_lookup_table = tf.Variable(
@@ -493,7 +500,7 @@ class NER(object):
                                         proj_clip=None,
                                         num_unit_shards=None,
                                         num_proj_shards=None,
-                                        forget_bias=1.0,
+                                       	forget_bias=1.0,
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
@@ -857,7 +864,8 @@ class NER(object):
         """Saves predictions to the provided file."""
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
-                batch_predictions = np.array(predictions[batch_index])
+		preds = ut.convert_to_iob(predictions[batch_index], self.num_to_tag, self.tag_to_num)
+                batch_predictions = np.array(preds)
                 b_size = batch_predictions.shape[0]
                 for sentence_index in range(b_size):
                     for word_index in range(self.max_sentence_length):
@@ -954,7 +962,7 @@ def run_NER():
             print 'Dev loss: {}'.format(dev_loss)
             print 'Total test time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to dev.predicted'
-            model.save_predictions(
+	    model.save_predictions(
                                 predictions,
                                 model.sentence_length_X_dev,
                                 "dev.predicted",
@@ -1051,4 +1059,4 @@ def test_NER():
 
 if __name__ == "__main__":
   run_NER()
-  #test_NER()
+ #test_NER()
