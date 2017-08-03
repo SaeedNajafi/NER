@@ -1,5 +1,6 @@
 import re
 import os
+import codecs
 import getpass
 import sys
 import time
@@ -28,7 +29,6 @@ class NER(object):
     max_gradient_norm = 5.
     max_epochs = 24
     early_stopping = 2
-
     CRF = True
 
     #path to different files!
@@ -92,13 +92,6 @@ class NER(object):
 
         self.num_to_char = dict(enumerate(chars))
         self.char_to_num = {v:k for k,v in self.num_to_char.iteritems()}
-	'''
-        # For IOB and IOB2 format
-        tagnames = ['O', 'B-LOC', 'I-LOC',
-                    'B-ORG', 'I-ORG',
-                    'B-PER','I-PER',
-                    'B-MISC', 'I-MISC']
-	'''
 
 	# For IOBES format
 	tagnames = ['O', 'B-LOC', 'I-LOC', 'S-LOC', 'E-LOC',
@@ -289,9 +282,6 @@ class NER(object):
                                 word_lookup_table,
                                 self.word_input_placeholder)
 
-        #update embeddings and embedding size to consider capatilization patterns.
-        word_embeddings = tf.concat([word_embeddings, cap_embeddings], axis=2)
-        self.word_embedding_size += 4
 
         boundry = np.sqrt(np.divide(3.0, self.char_embedding_size))
         new_char_vectors = np.random.uniform(
@@ -310,7 +300,7 @@ class NER(object):
                                 character_lookup_table,
                                 self.char_input_placeholder)
 
-        return char_embeddings, word_embeddings
+        return char_embeddings, word_embeddings, cap_embeddings
 
     def xavier_initializer(self, shape, **kargs):
         """Defines an initializer for the Xavier distribution.
@@ -335,13 +325,14 @@ class NER(object):
 
         return out
 
-    def add_model(self, char_embeddings, word_embeddings):
+    def add_model(self, char_embeddings, word_embeddings, cap_embeddings):
 
         #current batch_size
         b_size = tf.shape(word_embeddings)[0]
 
         char_embeddings_t = tf.reshape(char_embeddings,
                             [-1, self.max_word_length, self.char_embedding_size])
+
         #character-level bidirectional rnns
         forward_char_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.char_hidden_units,
@@ -424,9 +415,12 @@ class NER(object):
         t = tf.concat([char_final_embeddings, word_embeddings], 2)
         final_embeddings = tf.nn.dropout(t, self.dropout_placeholder)
 
+	#consider capatilization patterns.
+        final_embeddings = tf.concat([final_embeddings, cap_embeddings], axis=2)
+
         #Creating context embeddings with respect to the windows size = 5
         temp = []
-        zeros = tf.zeros((b_size, self.word_embedding_size +  2 * self.char_hidden_units), dtype=tf.float32)
+        zeros = tf.zeros((b_size, self.word_embedding_size +  2 * self.char_hidden_units + 4), dtype=tf.float32)
         final_embeddings_t = tf.transpose(final_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index == 0:
@@ -527,6 +521,7 @@ class NER(object):
                                         encoder_final_hs,
                                         self.dropout_placeholder
                                     )
+
         """hidden layer"""
         with tf.variable_scope("hidden"):
             U_hidden = tf.get_variable(
@@ -636,12 +631,9 @@ class NER(object):
 
         #we use adam optimizer
         optimizer = tf.train.AdamOptimizer(self.learning_rate)
-        gradients = optimizer.compute_gradients(loss)
-        clipped_gradients = [
-                (tf.clip_by_average_norm(grad, self.max_gradient_norm), var)
-                                for grad, var in gradients
-                            ]
-        train_operation = optimizer.apply_gradients(clipped_gradients)
+        gradients, variables = zip(*optimizer.compute_gradients(loss))
+        clipped_gradients, global_norm = tf.clip_by_global_norm(gradients, self.max_gradient_norm)
+        train_operation = optimizer.apply_gradients(zip(clipped_gradients, variables))
 
         return train_operation
 
@@ -649,8 +641,8 @@ class NER(object):
         """Constructs the network using the helper functions defined above."""
         self.load_data()
         self.add_placeholders()
-        char_embed, word_embed = self.add_embedding()
-        y = self.add_model(char_embed, word_embed)
+        char_embed, word_embed, cap_embed = self.add_embedding()
+        y = self.add_model(char_embed, word_embed, cap_embed)
         self.loss = self.add_loss_op(y)
         self.train_op = self.add_training_op(self.loss)
         if not self.CRF:
@@ -685,8 +677,9 @@ class NER(object):
                     orig_sentence_length_X,
                     self.batch_size,
                     self.tag_size,
-                    orig_Y
-                    )
+                    orig_Y,
+		    True)
+
         for step, (
                     char_input_data,
                     word_length_data,
@@ -764,7 +757,8 @@ class NER(object):
                         sentence_length_X,
                         self.batch_size,
                         self.tag_size,
-                        Y)
+                        Y,
+			False)
         else:
             data = ut.data_iterator(
                         char_X,
@@ -775,7 +769,8 @@ class NER(object):
                         sentence_length_X,
                         self.batch_size,
                         self.tag_size,
-                        None)
+                        None,
+			False)
 
         for step, (
                     char_input_data,
@@ -848,7 +843,8 @@ class NER(object):
                 results.append(predicted_indices)
 
         if len(losses)==0:
-            return 0,results
+            return 0, results
+
         else:
             return np.mean(losses), results
 
@@ -880,6 +876,11 @@ class NER(object):
                             f.write(to_file)
 
                     f.write("\n")
+
+    def eval_fscore(self):
+	os.system("%s < %s > %s" % ('./conlleval', 'temp.predicted', 'temp.score'))
+	result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
+	return float(result_lines[1].strip().split()[-1])
 
 def run_NER():
     """run NER model implementation.
@@ -913,7 +914,7 @@ def run_NER():
                                         model.sentence_length_X_train,
                                         model.Y_train
                                         )
-                val_loss, predictions = model.predict(
+                val_loss , predictions = model.predict(
                                         session,
                                         model.char_X_dev,
                                         model.word_length_X_dev,
@@ -926,8 +927,24 @@ def run_NER():
 
                 print 'Training loss: {}'.format(train_loss)
                 print 'Validation loss: {}'.format(val_loss)
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+
+		model.save_predictions(
+                                predictions,
+                                model.sentence_length_X_dev,
+                                "temp.predicted",
+                                model.word_X_dev,
+                                model.Y_dev
+                                )
+
+		val_fscore = model.eval_fscore()
+
+		val_fscore_loss = 100.0 - val_fscore
+
+		print 'Validation fscore: {}'.format(val_fscore)
+		print 'Validation fscore loss: {}'.format(val_fscore_loss)
+
+                if  val_fscore_loss + val_loss < best_val_loss:
+                    best_val_loss = val_loss + val_fscore_loss
                     best_val_epoch = epoch
                     if not os.path.exists("./weights"):
                         os.makedirs("./weights")
@@ -935,7 +952,7 @@ def run_NER():
 
                 # For early stopping which is kind of regularization for network.
                 if epoch - best_val_epoch > model.early_stopping:
-                    break
+			break
                 ###
 
                 print 'Epoch training time: {} seconds'.format(time.time() - start)
@@ -996,67 +1013,5 @@ def run_NER():
                                 model.Y_test
                                 )
 
-def test_NER():
-	with tf.Graph().as_default():
-        	model = NER()
-
-        	init = tf.global_variables_initializer()
-        	saver = tf.train.Saver()
-
-		with tf.Session() as session:
-            		session.run(init)
-			print
-		        print 'Dev'
-            		start = time.time()
-            		dev_loss, predictions = model.predict(
-                                                session,
-                                                model.char_X_dev,
-                                                model.word_length_X_dev,
-                                                model.cap_X_dev,
-                                                model.word_X_dev,
-                                                model.mask_X_dev,
-                                                model.sentence_length_X_dev,
-                                                model.Y_dev
-                                                )
-
-            		print 'Dev loss: {}'.format(dev_loss)
-            		print 'Total test time: {} seconds'.format(time.time() - start)
-            		print 'Writing predictions to dev.predicted'
-            		model.save_predictions(
-                                predictions,
-                                model.sentence_length_X_dev,
-                                "dev.predicted",
-                                model.word_X_dev,
-                                model.Y_dev
-                                )
-
-            		print
-            		print
-            		print 'Test'
-            		start = time.time()
-            		test_loss, predictions = model.predict(
-                                                session,
-                                                model.char_X_test,
-                                                model.word_length_X_test,
-                                                model.cap_X_test,
-                                                model.word_X_test,
-                                                model.mask_X_test,
-                                                model.sentence_length_X_test,
-                                                model.Y_test
-                                                )
-
-            		print 'Test loss: {}'.format(test_loss)
-            		print 'Total test time: {} seconds'.format(time.time() - start)
-            		print 'Writing predictions to test.predicted'
-            		model.save_predictions(
-                                predictions,
-                                model.sentence_length_X_test,
-                                "test.predicted",
-                                model.word_X_test,
-                                model.Y_test
-                                )
-
-
 if __name__ == "__main__":
   run_NER()
- #test_NER()

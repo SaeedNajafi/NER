@@ -130,8 +130,6 @@ def iob2(tags):
             tags[i] = 'B' + tag[1:]
     return True
 
-
-
 #https://github.com/glample/tagger/blob/master/loader.py
 def capalize_word(word):
     """
@@ -306,7 +304,7 @@ def padding(
             'sentence_length_X': array(sentence_length_X),
             'Y': array(Y)
             }
-            
+
     return ret
 
 def data_iterator(
@@ -318,7 +316,8 @@ def data_iterator(
         orig_sentence_length_X,
         batch_size,
         tag_size,
-        orig_Y=None
+        orig_Y,
+	shuffle
         ):
 
     data_cap_X, data_char_X, data_word_length_X = orig_cap_X, orig_char_X, orig_word_length_X
@@ -326,8 +325,12 @@ def data_iterator(
     data_sentence_length_X, data_Y = orig_sentence_length_X, orig_Y
 
     total_steps = int(np.ceil(len(data_word_X) / float(batch_size)))
+    if shuffle:
+    	steps = np.random.permutation(total_steps).tolist()
+    else:
+	steps = range(total_steps)
 
-    for step in xrange(total_steps):
+    for step in steps:
         # Create the batch by selecting up to batch_size elements
         batch_start = step * batch_size
         ret_char_X = data_char_X[batch_start:batch_start + batch_size][:][:]
