@@ -470,7 +470,7 @@ class NER(object):
 
         temp = tf.stack(temp, axis=1)
 
-        #apply dropout to whole context
+        
         forward_word_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.word_hidden_units,
                                         use_peepholes=False,
