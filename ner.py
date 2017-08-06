@@ -29,7 +29,7 @@ class NER(object):
     max_gradient_norm = 5.
     max_epochs = 24
     early_stopping = 2
-    CRF = True
+    CRF = False
 
     #path to different files!
     word_dic_path = './data/glove_en_word_100_dic.txt'
@@ -470,7 +470,6 @@ class NER(object):
 
         temp = tf.stack(temp, axis=1)
 
-        
         forward_word_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.word_hidden_units,
                                         use_peepholes=False,
@@ -498,7 +497,6 @@ class NER(object):
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
-
 
         (h_fw, h_bw), _ = tf.nn.bidirectional_dynamic_rnn(
                                     forward_word_level_lstm,
