@@ -446,13 +446,13 @@ class NER(object):
         #index for first character of each word
         index = tf.add(b_index, s_index)
 
-        #select first character's hidden state as suffix information for each word
+        #select first character's hidden state as prefix information for each word
         bck_char = tf.gather(
                     tf.reshape(
                         char_h_bw,
                         [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
                     index)
-        ##################################     prefix and suffix information extracting    ################################## 
+        ##################################     prefix and suffix information extracting    ##################################
 
 
         """ combine character-level embeddings with word-level embeddings"""
@@ -463,7 +463,7 @@ class NER(object):
         #consider capatilization patterns.
         final_embeddings = tf.concat([final_embeddings, cap_embeddings], axis=2)
 
-        #Creating context embeddings with respect to the windows size = 5
+        #Creating context embeddings with respect to the window size = 5
         temp = []
         zeros = tf.zeros((b_size, self.word_embedding_size +  2 * self.char_hidden_units + 4), dtype=tf.float32)
         final_embeddings_t = tf.transpose(final_embeddings, [1,0,2])
@@ -1028,7 +1028,7 @@ def run_NER():
                 if epoch - best_val_epoch > model.early_stopping:
                     break
                     ###
-                
+
                 print 'Epoch training time: {} seconds'.format(time.time() - start)
 
             print 'Total training time: {} seconds'.format(time.time() - first_start)
