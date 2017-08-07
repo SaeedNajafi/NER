@@ -29,8 +29,8 @@ class NER(object):
     early_stopping = 2
 
     """inference type"""
-    inference = "softmax"
-    #inference = "crf"
+    #inference = "softmax"
+    inference = "crf"
     #inference = "decoder_rnn"
 
     """for decoder_rnn"""
@@ -55,13 +55,13 @@ class NER(object):
         H = self.add_model(char_embed, word_embed, cap_embed)
 
         if self.inference=="softmax":
-            self.loss = predict_by_softmax(H)
+            self.loss = self.predict_by_softmax(H)
 
         elif self.inference=="crf":
-            self.loss = predict_by_crf(H)
+            self.loss = self.predict_by_crf(H)
 
         elif self.inference=="crf":
-            self.loss = predict_by_decoder_rnn(H)
+            self.loss = self.predict_by_decoder_rnn(H)
 
         self.train_op = self.add_training_op(self.loss)
         return
@@ -636,7 +636,7 @@ class NER(object):
 
             self.preds = tf.reshape(
                         preds,
-                        (b_size, self.max_sentence_length, self.tag_size)
+                        (-1, self.max_sentence_length, self.tag_size)
                         )
 
         self.predictions = tf.nn.softmax(self.preds)
@@ -687,7 +687,7 @@ class NER(object):
 
             self.preds = tf.reshape(
                         preds,
-                        (b_size, self.max_sentence_length, self.tag_size)
+                        (-1, self.max_sentence_length, self.tag_size)
                         )
 
         self.log_likelihood, self.transition_params = tf.contrib.crf.crf_log_likelihood(
@@ -902,7 +902,7 @@ class NER(object):
 
                 results.append(inner_results)
 
-            elif self.inference=="softmax"::
+            elif self.inference=="softmax":
 
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data

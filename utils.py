@@ -141,10 +141,9 @@ def canonicalize_char(word, charset):
 	word = word.lower()
 	new_word = ""
 	for each in list(word):
-    	if each in charset:
-        	new_word += each
-        	
-    return new_word
+		if each in charset:
+			new_word += each
+	return new_word
 
 def seq_to_sentences(
         unchanged_words,
