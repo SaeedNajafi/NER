@@ -30,8 +30,8 @@ class NER(object):
 
     """inference type"""
     #inference = "softmax"
-    inference = "crf"
-    #inference = "decoder_rnn"
+    #inference = "crf"
+    inference = "decoder_rnn"
 
     """for decoder_rnn"""
     decoding="greedy"
@@ -608,16 +608,16 @@ class NER(object):
         """
 
         """softmax prediction layer"""
-        with tf.variable_scope("baseline"):
-            U_baseline = tf.get_variable(
-                            "U_baseline",
+        with tf.variable_scope("softmax"):
+            U_softmax = tf.get_variable(
+                            "U_softmax",
                             (self.word_hidden_units, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
 
-            b_baseline = tf.get_variable(
-                            "b_baseline",
+            b_softmax = tf.get_variable(
+                            "b_softmax",
                             (self.tag_size,),
                             tf.float32,
                             tf.constant_initializer(0.0)
@@ -629,9 +629,9 @@ class NER(object):
                                 H,
                                 (-1, self.word_hidden_units)
                             ),
-                            U_baseline
+                            U_softmax
                         ),
-                        b_baseline
+                        b_softmax
                     )
 
             self.preds = tf.reshape(
@@ -658,16 +658,16 @@ class NER(object):
         """
 
         """softmax prediction layer"""
-        with tf.variable_scope("baseline"):
-            U_baseline = tf.get_variable(
-                            "U_baseline",
+        with tf.variable_scope("softmax"):
+            U_softmax = tf.get_variable(
+                            "U_softmax",
                             (self.word_hidden_units, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
 
-            b_baseline = tf.get_variable(
-                            "b_baseline",
+            b_softmax = tf.get_variable(
+                            "b_softmax",
                             (self.tag_size,),
                             tf.float32,
                             tf.constant_initializer(0.0)
@@ -680,9 +680,9 @@ class NER(object):
                                 H,
                                 (-1, self.word_hidden_units)
                             ),
-                            U_baseline
+                            U_softmax
                         ),
-                        b_baseline
+                        b_softmax
                     )
 
             self.preds = tf.reshape(
@@ -697,6 +697,116 @@ class NER(object):
                                                             )
 
         loss = tf.reduce_mean(-self.log_likelihood)
+
+        return loss
+
+    def train_by_decoder_rnn(self, H):
+
+        """
+        Apply a decoder_rnn layer in the training step to get a score for each tag.
+        Defines the loss during training.
+        """
+
+        #we need to define a tag embedding layer.
+        with tf.variable_scope("tag_embedding_layer"):
+            tag_lookup_table = tf.Variable(
+                                    tf.diag(
+                                        tf.ones(
+                                                (self.tag_size,),
+                                                dtype=tf.float32
+                                            )
+                                        )
+                                    name = "tag_lookup_table",
+                                    shape = (self.tag_size, self.tag_size),
+                                    dtype= tf.float32,
+                                    trainable= False,
+                                    )
+
+        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
+
+        #add GO symbol into the begining of every sentence.
+        temp = []
+        GO_symbol = tf.zeros((self.tag_size,), dtype=tf.float32)
+        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
+        for time_index in range(self.max_sentence_length):
+            if time_index==0:
+                temp.append(GO_symbol)
+            else:
+                temp.append(tag_embeddings_t[time_index])
+
+        temp = tf.stack(temp, axis=1)
+
+        tag_embeddings_final = temp
+
+        self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+                                        num_units=self.tag_size,
+                                        use_peepholes=False,
+                                        cell_clip=None,
+                                        initializer=self.xavier_initializer,
+                                        num_proj=None,
+                                        proj_clip=None,
+                                        num_unit_shards=None,
+                                        num_proj_shards=None,
+                                        forget_bias=1.0,
+                                        state_is_tuple=True,
+                                        activation=tf.tanh
+                                        )
+
+        tag_scores, _ = tf.nn.dynamic_rnn(
+                                    self.decoder_lstm_cell,
+                                    tag_embeddings_final,
+                                    sequence_length=self.sentence_length_placeholder,
+                                    initial_state=None,
+                                    dtype=tf.float32,
+                                    parallel_iterations=None,
+                                    swap_memory=False,
+                                    time_major=False,
+                                    scope="decoder_rnn"
+                                    )
+
+        tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
+
+        H_and_tag_scores = tf.concat([H,tag_scores_dropped],axis=2)
+
+        """softmax prediction layer"""
+        with tf.variable_scope("softmax"):
+            U_softmax = tf.get_variable(
+                            "U_softmax",
+                            (self.word_hidden_units + self.tag_size, self.tag_size),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            b_softmax = tf.get_variable(
+                            "b_softmax",
+                            (self.tag_size,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
+            preds = tf.add(
+                        tf.matmul(
+                            tf.reshape(
+                                H_and_tag_scores,
+                                (-1, self.word_hidden_units + self.tag_size)
+                            ),
+                            U_softmax
+                        ),
+                        b_softmax
+                    )
+
+            self.preds = tf.reshape(
+                        preds,
+                        (-1, self.max_sentence_length, self.tag_size)
+                        )
+
+        loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=self.preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
         return loss
 
     def add_training_op(self, loss):
