@@ -108,28 +108,6 @@ def iob_iobes(tags):
             raise Exception('Invalid IOB format!')
     return new_tags
 
-#https://github.com/glample/tagger/blob/master/utils.py
-def iob2(tags):
-    """
-    Check that tags have a valid IOB format.
-    Tags in IOB1 format are converted to IOB2.
-    """
-    for i, tag in enumerate(tags):
-        if tag == 'O':
-            continue
-        split = tag.split('-')
-        if len(split) != 2 or split[0] not in ['I', 'B']:
-            return False
-        if split[0] == 'B':
-            continue
-        elif i == 0 or tags[i - 1] == 'O':  # conversion IOB1 to IOB2
-            tags[i] = 'B' + tag[1:]
-        elif tags[i - 1][1:] == tag[1:]:
-            continue
-        else:  # conversion IOB1 to IOB2
-            tags[i] = 'B' + tag[1:]
-    return True
-
 #https://github.com/glample/tagger/blob/master/loader.py
 def capalize_word(word):
     """
@@ -146,26 +124,26 @@ def capalize_word(word):
         return 1
 
     elif word[0].upper() == word[0]:
-	return 2
+    	return 2
 
     else:
-	return 3
+    	return 3
 
 def canonicalize_word(word, wordset):
 	if word in wordset: return word
 	elif word.lower() in wordset: return word.lower()
 	elif re.search(r'\d', word):
 		return "number" # for glove
-    	else:
+	else:
 		return "unknown" # for glove
 
 def canonicalize_char(word, charset):
-    word = word.lower()
-    new_word = ""
-    for each in list(word):
-        if each in charset:
-            new_word += each
-
+	word = word.lower()
+	new_word = ""
+	for each in list(word):
+    	if each in charset:
+        	new_word += each
+        	
     return new_word
 
 def seq_to_sentences(
@@ -317,7 +295,7 @@ def data_iterator(
         batch_size,
         tag_size,
         orig_Y,
-	shuffle
+        shuffle
         ):
 
     data_cap_X, data_char_X, data_word_length_X = orig_cap_X, orig_char_X, orig_word_length_X
@@ -328,7 +306,7 @@ def data_iterator(
     if shuffle:
     	steps = np.random.permutation(total_steps).tolist()
     else:
-	steps = range(total_steps)
+    	steps = range(total_steps)
 
     for step in steps:
         # Create the batch by selecting up to batch_size elements

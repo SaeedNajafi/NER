@@ -9,11 +9,9 @@ import tensorflow as tf
 import utils as ut
 
 class NER(object):
-    """Implements an NER (Named Entity Recognition) model.
-    """
+    """ Implements an NER (Named Entity Recognition) model """
 
-    """Model hyperparams and data information.
-    """
+    """ Model hyperparams and data information """
     word_embedding_size = 100
     char_embedding_size = 25
     word_hidden_units = 100
@@ -29,15 +27,44 @@ class NER(object):
     max_gradient_norm = 5.
     max_epochs = 24
     early_stopping = 2
-    CRF = False
 
-    #path to different files!
+    """inference type"""
+    inference = "softmax"
+    #inference = "crf"
+    #inference = "decoder_rnn"
+
+    """for decoder_rnn"""
+    decoding="greedy"
+    #decoding="beamsearch"
+    #decoding="viterbi"
+
+
+    """path to different files"""
     word_dic_path = './data/glove_en_word_100_dic.txt'
     word_vectors_path = './data/glove_en_word_100_vectors.txt'
     char_dic_path = './data/en_char_dic.txt'
     train_set_path = './data/eng.train.v1'
     dev_set_path = './data/eng.testa.v1'
     test_set_path = './data/eng.testb.v1'
+
+    def __init__(self):
+        """Constructs the network using the helper functions defined below."""
+        self.load_data()
+        self.add_placeholders()
+        char_embed, word_embed, cap_embed = self.add_embedding()
+        H = self.add_model(char_embed, word_embed, cap_embed)
+
+        if self.inference=="softmax":
+            self.loss = predict_by_softmax(H)
+
+        elif self.inference=="crf":
+            self.loss = predict_by_crf(H)
+
+        elif self.inference=="crf":
+            self.loss = predict_by_decoder_rnn(H)
+
+        self.train_op = self.add_training_op(self.loss)
+        return
 
     def load_data(self):
         """
@@ -46,7 +73,7 @@ class NER(object):
 
         """
 
-        # Loads the starter word vectors
+        #Loads the starter word vectors
         print "INFO: Reading word embeddings!"
         self.word_vectors, words = ut.load_embeddings(
                                         self.word_dic_path,
@@ -73,6 +100,7 @@ class NER(object):
                 new_words.append(new_word)
 
         words = words + new_words
+
         #Initializing new word vectors!
         boundry = np.sqrt(np.divide(3.0, self.word_embedding_size))
         new_word_vectors = np.random.uniform(
@@ -93,8 +121,8 @@ class NER(object):
         self.num_to_char = dict(enumerate(chars))
         self.char_to_num = {v:k for k,v in self.num_to_char.iteritems()}
 
-	# For IOBES format
-	tagnames = ['O', 'B-LOC', 'I-LOC', 'S-LOC', 'E-LOC',
+        # For IOBES format
+        tagnames = ['O', 'B-LOC', 'I-LOC', 'S-LOC', 'E-LOC',
                     'B-ORG', 'I-ORG', 'S-ORG', 'E-ORG',
                     'B-PER','I-PER', 'S-PER', 'E-PER',
                     'B-MISC', 'I-MISC', 'S-MISC', 'E-MISC']
@@ -229,7 +257,6 @@ class NER(object):
                         dropout_batch,
                         tag_batch=None
                         ):
-
         """Creates the feed_dict.
 
         A feed_dict takes the form of:
@@ -330,10 +357,14 @@ class NER(object):
         #current batch_size
         b_size = tf.shape(word_embeddings)[0]
 
+
+
+
+        ##################################     prefix and suffix information extracting    ##################################
         char_embeddings_t = tf.reshape(char_embeddings,
                             [-1, self.max_word_length, self.char_embedding_size])
 
-        #character-level bidirectional rnns
+        #character-level forward lstm cell
         forward_char_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.char_hidden_units,
                                         use_peepholes=False,
@@ -348,6 +379,7 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
+        #character-level backward lstm cell
         backward_char_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.char_hidden_units,
                                         use_peepholes=False,
@@ -366,6 +398,8 @@ class NER(object):
                                     self.word_length_placeholder,
                                     (b_size * self.max_sentence_length,))
 
+        #character-level bidirectional rnn to construct prefix and suffix information
+        #for each word.
         (char_h_fw, char_h_bw), _ = tf.nn.bidirectional_dynamic_rnn(
                                     forward_char_level_lstm,
                                     backward_char_level_lstm,
@@ -380,42 +414,53 @@ class NER(object):
                                     scope="char"
                                     )
 
-        #select last outputs.
+        #select last outputs for suffix information.
+
+        #batch index
         b_index = tf.reshape(
                     tf.multiply(
                     tf.range(0, b_size), self.max_word_length * self.max_sentence_length),
                     (b_size, 1))
 
+        #sentence index
         s_index = tf.reshape(
                     tf.multiply(
                     tf.range(0, self.max_sentence_length), self.max_word_length),
                     (1, self.max_sentence_length))
 
+        #index for last character of each word
         index = tf.add(
                     tf.add(b_index, s_index),
                     tf.subtract(self.word_length_placeholder, 1))
 
+        #select last character's hidden state as suffix information for each word
         fwd_char = tf.gather(
                     tf.reshape(
                         char_h_fw,
                         [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
                     index)
 
-        #select first outputs.
+
+
+        #select first outputs for prefix information
+        #index for first character of each word
         index = tf.add(b_index, s_index)
+
+        #select first character's hidden state as suffix information for each word
         bck_char = tf.gather(
                     tf.reshape(
                         char_h_bw,
                         [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
                     index)
+        ##################################     prefix and suffix information extracting    ################################## 
+
 
         """ combine character-level embeddings with word-level embeddings"""
         char_final_embeddings = tf.concat([fwd_char, bck_char], 2)
-
         t = tf.concat([char_final_embeddings, word_embeddings], 2)
         final_embeddings = tf.nn.dropout(t, self.dropout_placeholder)
 
-	#consider capatilization patterns.
+        #consider capatilization patterns.
         final_embeddings = tf.concat([final_embeddings, cap_embeddings], axis=2)
 
         #Creating context embeddings with respect to the windows size = 5
@@ -470,6 +515,8 @@ class NER(object):
 
         temp = tf.stack(temp, axis=1)
 
+
+        ##################################     word-level encoder    ##################################
         forward_word_level_lstm = tf.contrib.rnn.LSTMCell(
                                         num_units=self.word_hidden_units,
                                         use_peepholes=False,
@@ -520,6 +567,8 @@ class NER(object):
                                         self.dropout_placeholder
                                     )
 
+        ##################################     word-level encoder    ##################################
+
         """hidden layer"""
         with tf.variable_scope("hidden"):
             U_hidden = tf.get_variable(
@@ -537,7 +586,7 @@ class NER(object):
                             )
 
 
-            outputs = tf.add(
+            H = tf.add(
                         tf.matmul(
                             tf.reshape(
                                 dropped_encoder_final_hs,
@@ -547,29 +596,37 @@ class NER(object):
                         ),
                         b_hidden
                     )
-            outputs = tf.tanh(outputs)
+            H = tf.tanh(H)
 
-        """baseline prediction layer"""
+        return H
+
+    def predict_by_softmax(self, H):
+
+        """
+        Apply a softmax layer to get a probability for each tag.
+        Define the loss during training and do testing to save predictions.
+        """
+
+        """softmax prediction layer"""
         with tf.variable_scope("baseline"):
-       		U_baseline = tf.get_variable(
+            U_baseline = tf.get_variable(
                             "U_baseline",
                             (self.word_hidden_units, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
 
-        	b_baseline = tf.get_variable(
+            b_baseline = tf.get_variable(
                             "b_baseline",
                             (self.tag_size,),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
 
-
-        	preds = tf.add(
+            preds = tf.add(
                         tf.matmul(
                             tf.reshape(
-                                outputs,
+                                H,
                                 (-1, self.word_hidden_units)
                             ),
                             U_baseline
@@ -577,40 +634,69 @@ class NER(object):
                         b_baseline
                     )
 
-         	self.preds = tf.reshape(
+            self.preds = tf.reshape(
                         preds,
                         (b_size, self.max_sentence_length, self.tag_size)
-                    )
+                        )
 
-        if self.CRF:
-            #CRF
-            self.log_likelihood, self.transition_params = tf.contrib.crf.crf_log_likelihood(
-                                                            self.preds,
-                                                            self.tag_placeholder,
-                                                            self.sentence_length_placeholder
-                                                            )
-            return self.log_likelihood
-
-        else:
-            return self.preds
-
-    def add_loss_op(self, output_before_softmax):
-        """Adds cross_entropy_loss ops to the computational graph.
-           OR CRF loss.
-        """
-
-        log_likelihood = output_before_softmax
-        if self.CRF:
-            loss = tf.reduce_mean(-log_likelihood)
-
-        else:
-            loss = tf.contrib.seq2seq.sequence_loss(
-                                    logits=output_before_softmax,
+        self.predictions = tf.nn.softmax(self.preds)
+        loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=self.preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
                                     average_across_timesteps=True,
                                     average_across_batch=True
                                     )
+
+        return loss
+
+    def predict_by_crf(self, H):
+
+        """
+        Apply a crf layer to get a probability for each tag.
+        Define the loss during training.
+        """
+
+        """softmax prediction layer"""
+        with tf.variable_scope("baseline"):
+            U_baseline = tf.get_variable(
+                            "U_baseline",
+                            (self.word_hidden_units, self.tag_size),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            b_baseline = tf.get_variable(
+                            "b_baseline",
+                            (self.tag_size,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
+
+            preds = tf.add(
+                        tf.matmul(
+                            tf.reshape(
+                                H,
+                                (-1, self.word_hidden_units)
+                            ),
+                            U_baseline
+                        ),
+                        b_baseline
+                    )
+
+            self.preds = tf.reshape(
+                        preds,
+                        (b_size, self.max_sentence_length, self.tag_size)
+                        )
+
+        self.log_likelihood, self.transition_params = tf.contrib.crf.crf_log_likelihood(
+                                                            self.preds,
+                                                            self.tag_placeholder,
+                                                            self.sentence_length_placeholder
+                                                            )
+
+        loss = tf.reduce_mean(-self.log_likelihood)
         return loss
 
     def add_training_op(self, loss):
@@ -634,17 +720,6 @@ class NER(object):
         train_operation = optimizer.apply_gradients(zip(clipped_gradients, variables))
 
         return train_operation
-
-    def __init__(self):
-        """Constructs the network using the helper functions defined above."""
-        self.load_data()
-        self.add_placeholders()
-        char_embed, word_embed, cap_embed = self.add_embedding()
-        y = self.add_model(char_embed, word_embed, cap_embed)
-        self.loss = self.add_loss_op(y)
-        self.train_op = self.add_training_op(self.loss)
-        if not self.CRF:
-            self.predictions = tf.nn.softmax(y)
 
     def run_epoch(
                 self,
@@ -676,7 +751,7 @@ class NER(object):
                     self.batch_size,
                     self.tag_size,
                     orig_Y,
-		    True)
+                    True)
 
         for step, (
                     char_input_data,
@@ -698,7 +773,7 @@ class NER(object):
                         tag_batch=tag_data
                     )
 
-            if self.CRF:
+            if self.inference=="crf":
                 loss, _ = session.run(
                                 [self.loss, self.train_op],
                                 feed_dict=feed
@@ -740,6 +815,7 @@ class NER(object):
         """Make predictions from the provided model."""
 
         # If Y is given, the loss is also calculated
+
         # We deactivate dropout by setting it to 1
         dp = 1.0
 
@@ -756,7 +832,7 @@ class NER(object):
                         self.batch_size,
                         self.tag_size,
                         Y,
-			False)
+                        False)
         else:
             data = ut.data_iterator(
                         char_X,
@@ -768,7 +844,7 @@ class NER(object):
                         self.batch_size,
                         self.tag_size,
                         None,
-			False)
+                        False)
 
         for step, (
                     char_input_data,
@@ -789,7 +865,8 @@ class NER(object):
                         dropout_batch=dp,
                         tag_batch=tag_data
                     )
-            if self.CRF:
+
+            if self.inference=="crf":
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
                     loss, unary_scores, sequence_lengths, transition_params = session.run(
@@ -799,8 +876,8 @@ class NER(object):
                                                                         self.sentence_length_placeholder,
                                                                         self.transition_params
                                                                         ],
-									feed_dict=feed
-                                                                     )
+                                                                        feed_dict=feed
+                                                                        )
                     losses.append(loss)
                 else:
                     unary_scores, sequence_lengths, transition_params = session.run(
@@ -809,8 +886,8 @@ class NER(object):
                                                                         self.sentence_length_placeholder,
                                                                         self.transition_params
                                                                         ],
-									feed_dict=feed
-                                                                     )
+                                                                        feed_dict=feed
+                                                                        )
                 inner_results = []
                 for unary_scores_, sequence_length_ in zip(unary_scores, sequence_lengths):
                     # Remove padding.
@@ -824,7 +901,8 @@ class NER(object):
                     inner_results.append(predicted_indices)
 
                 results.append(inner_results)
-            else:
+
+            elif self.inference=="softmax"::
 
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
@@ -839,6 +917,7 @@ class NER(object):
 
                 predicted_indices = preds.argmax(axis=2)
                 results.append(predicted_indices)
+
 
         if len(losses)==0:
             return 0, results
@@ -858,7 +937,7 @@ class NER(object):
         """Saves predictions to the provided file."""
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
-		preds = ut.convert_to_iob(predictions[batch_index], self.num_to_tag, self.tag_to_num)
+                preds = ut.convert_to_iob(predictions[batch_index], self.num_to_tag, self.tag_to_num)
                 batch_predictions = np.array(preds)
                 b_size = batch_predictions.shape[0]
                 for sentence_index in range(b_size):
@@ -876,9 +955,9 @@ class NER(object):
                     f.write("\n")
 
     def eval_fscore(self):
-	os.system("%s < %s > %s" % ('./conlleval', 'temp.predicted', 'temp.score'))
-	result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
-	return float(result_lines[1].strip().split()[-1])
+        os.system("%s < %s > %s" % ('./conlleval', 'temp.predicted', 'temp.score'))
+        result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
+        return float(result_lines[1].strip().split()[-1])
 
 def run_NER():
     """run NER model implementation.
@@ -925,8 +1004,7 @@ def run_NER():
 
                 print 'Training loss: {}'.format(train_loss)
                 print 'Validation loss: {}'.format(val_loss)
-
-		model.save_predictions(
+                model.save_predictions(
                                 predictions,
                                 model.sentence_length_X_dev,
                                 "temp.predicted",
@@ -934,12 +1012,10 @@ def run_NER():
                                 model.Y_dev
                                 )
 
-		val_fscore = model.eval_fscore()
-
-		val_fscore_loss = 100.0 - val_fscore
-
-		print 'Validation fscore: {}'.format(val_fscore)
-		print 'Validation fscore loss: {}'.format(val_fscore_loss)
+                val_fscore = model.eval_fscore()
+                val_fscore_loss = 100.0 - val_fscore
+                print 'Validation fscore: {}'.format(val_fscore)
+                print 'Validation fscore loss: {}'.format(val_fscore_loss)
 
                 if  val_fscore_loss + val_loss < best_val_loss:
                     best_val_loss = val_loss + val_fscore_loss
@@ -950,16 +1026,16 @@ def run_NER():
 
                 # For early stopping which is kind of regularization for network.
                 if epoch - best_val_epoch > model.early_stopping:
-			break
-                ###
-
+                    break
+                    ###
+                
                 print 'Epoch training time: {} seconds'.format(time.time() - start)
 
             print 'Total training time: {} seconds'.format(time.time() - first_start)
 
 
             saver.restore(session, './weights/ner.weights')
-	    print
+            print
             print
             print 'Dev'
             start = time.time()
@@ -977,7 +1053,7 @@ def run_NER():
             print 'Dev loss: {}'.format(dev_loss)
             print 'Total test time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to dev.predicted'
-	    model.save_predictions(
+            model.save_predictions(
                                 predictions,
                                 model.sentence_length_X_dev,
                                 "dev.predicted",
