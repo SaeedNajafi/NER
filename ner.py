@@ -764,7 +764,7 @@ class NER(object):
                                         )
 
 	initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-        tag_scores, _ = tf.nn.dynamic_rnn(
+	tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
                                     sequence_length=self.sentence_length_placeholder,
