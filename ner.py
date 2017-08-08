@@ -365,7 +365,7 @@ class NER(object):
         return out
 
     def diag_initializer(self, shape, **kargs):
-	out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
+        out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
         return out
     def add_model(self, char_embeddings, word_embeddings, cap_embeddings):
 
