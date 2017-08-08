@@ -872,7 +872,7 @@ class NER(object):
                                     )
 
         return
-        
+
         def beamsearch_decoding(self, H, beamsize):
             return
 
@@ -1099,7 +1099,7 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                    _, loss, batch_predicted_indices = session.run(
+                    _, batch_predicted_indices, loss = session.run(
                                                         [
                                                             self.decoding_op,
                                                             self.outputs,
