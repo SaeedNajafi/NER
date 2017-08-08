@@ -717,7 +717,6 @@ class NER(object):
                                             )
                                         ),
                                     name = "tag_lookup_table",
-                                    shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
                                     trainable= False,
                                     )
@@ -726,7 +725,7 @@ class NER(object):
 
         #add GO symbol into the begining of every sentence.
         temp = []
-        GO_symbol = tf.zeros((self.tag_size,), dtype=tf.float32)
+        GO_symbol = tf.zeros((tf.shape(tag_embeddings)[0], self.tag_size), dtype=tf.float32)
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index==0:
