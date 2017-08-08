@@ -68,13 +68,13 @@ class NER(object):
 
 
         if self.inference=="decoder_rnn":
-            if decoding=="greedy":
+            if self.decoding=="greedy":
                 self.decoding_op = self.greedy_decoding(H)
 
-            if decoding=="beamsearch":
+            if self.decoding=="beamsearch":
                 self.decoding_op = self.beamsearch_decoding(H, self.beamsize)
 
-            if decoding=="viterbi":
+            if self.decoding=="viterbi":
                 self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
         return
 
@@ -364,6 +364,9 @@ class NER(object):
 
         return out
 
+    def diag_initializer(self, shape, **kargs):
+	out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
+        return out
     def add_model(self, char_embeddings, word_embeddings, cap_embeddings):
 
         #current batch_size
@@ -721,14 +724,9 @@ class NER(object):
 
         #we need to define a tag embedding layer.
         with tf.variable_scope("tag_embedding_layer"):
-            tag_lookup_table = tf.Variable(
-                                    tf.diag(
-                                        tf.ones(
-                                                (self.tag_size,),
-                                                dtype=tf.float32
-                                            )
-                                        ),
+            tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
+				    shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
                                     trainable= False,
                                     )
@@ -839,13 +837,14 @@ class NER(object):
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
 
         H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
-
         preds = []
         outputs = []
-        for time_index in self.max_sentence_length:
+        for time_index in range(self.max_sentence_length):
             if time_index==0:
+		tf.get_variable_scope().reuse_variables()
                 output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state)
             else:
+		tf.get_variable_scope().reuse_variables()
                 prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
                 output, state = self.decoder_lstm_cell.call(prev_output, state)
 
@@ -855,7 +854,7 @@ class NER(object):
             pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
             preds.append(pred)
             predictions = tf.nn.softmax(pred)
-            predicted_indices = predictions.argmax(axis=1)
+            predicted_indices = tf.argmax(predictions, axis=1)
             outputs.append(predicted_indices)
 
         self.outputs = tf.stack(outputs, axis=1)
