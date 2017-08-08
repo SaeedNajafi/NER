@@ -66,7 +66,7 @@ class NER(object):
 
         self.train_op = self.add_training_op(self.loss)
 
-        
+
         if self.inference=="decoder_rnn":
             if decoding=="greedy":
                 self.decoding_op = self.greedy_decoding(H)
@@ -76,13 +76,6 @@ class NER(object):
 
             if decoding=="viterbi":
                 self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
-<<<<<<< HEAD
-
-
-=======
-        
-        
->>>>>>> a561733d61a8e66be71da675a1b5cd61fbd6caab
         return
 
     def load_data(self):
@@ -741,7 +734,12 @@ class NER(object):
                                     )
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
+<<<<<<< HEAD
 	b_size = tf.shape(tag_embeddings)[0]
+=======
+
+        b_size = tf.shape(tag_embeddings)[0]
+>>>>>>> c184db0dccae51d16aa177e04246fb3b13981d72
         #add GO symbol into the begining of every sentence.
         temp = []
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
@@ -769,8 +767,12 @@ class NER(object):
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
+<<<<<<< HEAD
 
 	initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+=======
+        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+>>>>>>> c184db0dccae51d16aa177e04246fb3b13981d72
         tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
@@ -824,6 +826,62 @@ class NER(object):
                                     average_across_batch=True
                                     )
         return loss
+
+    def greedy_decoding(self, H):
+
+        #batch size
+        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_hidden_units))
+        b_size = tf.shape(H_reshaped)[0]
+
+        """Reload softmax prediction layer"""
+        with tf.variable_scope("softmax", reuse=True):
+            U_softmax = tf.get_variable("U_softmax")
+            b_softmax = tf.get_variable("b_softmax")
+
+        #we need to reload the tag embedding layer.
+        with tf.variable_scope("tag_embedding_layer", reuse=True):
+            tag_lookup_table = tf.get_variable("tag_lookup_table")
+
+
+
+        GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
+        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+
+        H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
+
+        preds = []
+        outputs = []
+        for time_index in self.max_sentence_length:
+            if time_index==0:
+                output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state)
+            else:
+                prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
+                output, state = self.decoder_lstm_cell.call(prev_output, state)
+
+            output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+            H_and_output = tf.concat([H_reshaped_t[time_index], output_dropped], axis=1)
+
+            pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+            preds.append(pred)
+            predictions = tf.nn.softmax(pred)
+            predicted_indices = predictions.argmax(axis=1)
+            outputs.append(predicted_indices)
+
+        self.outputs = tf.stack(outputs, axis=1)
+        preds = tf.stack(preds, axis=1)
+
+        self.decoding_loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
+
+        return
+
+        def beamsearch_decoding(self, H, beamsize):
+            return
 
     def add_training_op(self, loss):
         """Sets up the training Ops.
@@ -1045,9 +1103,28 @@ class NER(object):
                 results.append(predicted_indices)
 
             elif self.inference=="decoder_rnn":
-                (loss, batch_preds) = self.decode(session, feed, tag_data)
-                losses.append(loss)
-                batch_predicted_indices = batch_preds.argmax(axis=2)
+                if np.any(tag_data):
+                    feed[self.tag_placeholder] = tag_data
+
+                    _, batch_predicted_indices, loss = session.run(
+                                                        [
+                                                            self.decoding_op,
+                                                            self.outputs,
+                                                            self.decoding_loss
+                                                        ],
+                                                        feed_dict=feed
+                                                        )
+
+                    losses.append(loss)
+                else:
+                    _, batch_predicted_indices = session.run(
+                                                        [
+                                                            self.decoding_op,
+                                                            self.outputs
+                                                        ],
+                                                        feed_dict=feed
+                                                        )
+
                 results.append(batch_predicted_indices)
 
         if len(losses)==0:
@@ -1122,7 +1199,7 @@ def run_NER():
                                         model.sentence_length_X_train,
                                         model.Y_train
                                         )
-                exit()
+
                 val_loss , predictions = model.predict(
                                         session,
                                         model.char_X_dev,
