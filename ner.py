@@ -778,8 +778,8 @@ class NER(object):
                                     )
 
         tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-        tag_scores_dropped_reshaped = tf.reshape((-1, self.tag_size))
-        H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=2)
+        tag_scores_dropped_reshaped = tf.reshape(tag_scores_dropped, (-1, self.tag_size))
+        H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=1)
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
