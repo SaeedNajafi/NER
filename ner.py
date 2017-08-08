@@ -36,6 +36,7 @@ class NER(object):
     """for decoder_rnn"""
     decoding="greedy"
     #decoding="beamsearch"
+    #beamsize=4
     #decoding="viterbi"
 
 
@@ -64,6 +65,17 @@ class NER(object):
             self.loss = self.train_by_decoder_rnn(H)
 
         self.train_op = self.add_training_op(self.loss)
+
+        if self.inference=="decoder_rnn":
+            if decoding=="greedy":
+                self.decoding_op = self.greedy_decoding()
+
+            if decoding=="beamsearch":
+                self.decoding_op = self.beamsearch_decoding(self.beamsize)
+
+            if decoding=="viterbi":
+                self.decoding_op = self.beamsearch_decoding(self.tag_size)
+
         return
 
     def load_data(self):
@@ -726,7 +738,7 @@ class NER(object):
 
         #add GO symbol into the begining of every sentence.
         temp = []
-        GO_symbol = tf.zeros((self.tag_size,), dtype=tf.float32)
+        GO_symbol = tf.zeros((tf.shape(tag_embeddings)[0], self.tag_size), dtype=tf.float32)
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index==0:
@@ -1028,6 +1040,11 @@ class NER(object):
                 predicted_indices = preds.argmax(axis=2)
                 results.append(predicted_indices)
 
+            elif self.inference=="decoder_rnn":
+                (loss, batch_preds) = self.decode(session, feed, tag_data)
+                losses.append(loss)
+                batch_predicted_indices = batch_preds.argmax(axis=2)
+                results.append(batch_predicted_indices)
 
         if len(losses)==0:
             return 0, results
