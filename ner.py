@@ -66,7 +66,7 @@ class NER(object):
 
         self.train_op = self.add_training_op(self.loss)
 
-        '''
+        
         if self.inference=="decoder_rnn":
             if decoding=="greedy":
                 self.decoding_op = self.greedy_decoding(H)
@@ -76,8 +76,13 @@ class NER(object):
 
             if decoding=="viterbi":
                 self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
-        '''
+<<<<<<< HEAD
 
+
+=======
+        
+        
+>>>>>>> a561733d61a8e66be71da675a1b5cd61fbd6caab
         return
 
     def load_data(self):
