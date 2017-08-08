@@ -60,8 +60,8 @@ class NER(object):
         elif self.inference=="crf":
             self.loss = self.predict_by_crf(H)
 
-        elif self.inference=="crf":
-            self.loss = self.predict_by_decoder_rnn(H)
+        elif self.inference=="decoder_rnn":
+            self.loss = self.train_by_decoder_rnn(H)
 
         self.train_op = self.add_training_op(self.loss)
         return
@@ -883,7 +883,7 @@ class NER(object):
                         tag_batch=tag_data
                     )
 
-            if self.inference=="crf":
+            if self.inference=="crf" or self.inference=="decoder_rnn":
                 loss, _ = session.run(
                                 [self.loss, self.train_op],
                                 feed_dict=feed
@@ -1101,6 +1101,7 @@ def run_NER():
                                         model.sentence_length_X_train,
                                         model.Y_train
                                         )
+                exit()
                 val_loss , predictions = model.predict(
                                         session,
                                         model.char_X_dev,
