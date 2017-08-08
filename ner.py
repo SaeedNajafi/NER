@@ -735,9 +735,10 @@ class NER(object):
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
 
+        b_size = tf.shape(tag_embeddings)[0]
         #add GO symbol into the begining of every sentence.
         temp = []
-        GO_symbol = tf.zeros((tf.shape(tag_embeddings)[0], self.tag_size), dtype=tf.float32)
+        GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index==0:
@@ -767,7 +768,7 @@ class NER(object):
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
                                     sequence_length=self.sentence_length_placeholder,
-                                    initial_state=None,
+                                    initial_state=initial_state,
                                     dtype=tf.float32,
                                     parallel_iterations=None,
                                     swap_memory=False,
@@ -776,7 +777,7 @@ class NER(object):
                                     )
 
         tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-        tag_scores_dropped_reshaped = tf.reshape((-1, self.tag_size))
+        tag_scores_dropped_reshaped = tf.reshape(tag_scores_dropped, (-1, self.tag_size))
         H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=1)
 
         """softmax prediction layer"""
@@ -1186,7 +1187,7 @@ def run_NER():
                                         model.sentence_length_X_train,
                                         model.Y_train
                                         )
-                                        
+
                 val_loss , predictions = model.predict(
                                         session,
                                         model.char_X_dev,
