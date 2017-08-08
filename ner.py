@@ -77,7 +77,7 @@ class NER(object):
             if decoding=="viterbi":
                 self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
         '''
-        
+
         return
 
     def load_data(self):
@@ -736,10 +736,10 @@ class NER(object):
                                     )
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-
+	b_size = tf.shape(tag_embeddings)[0]
         #add GO symbol into the begining of every sentence.
         temp = []
-        GO_symbol = tf.zeros((tf.shape(tag_embeddings)[0], self.tag_size), dtype=tf.float32)
+        GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index==0:
@@ -765,11 +765,12 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
+	initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
                                     sequence_length=self.sentence_length_placeholder,
-                                    initial_state=None,
+                                    initial_state=initial_state,
                                     dtype=tf.float32,
                                     parallel_iterations=None,
                                     swap_memory=False,
