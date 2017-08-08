@@ -65,6 +65,7 @@ class NER(object):
             self.loss = self.train_by_decoder_rnn(H)
 
         self.train_op = self.add_training_op(self.loss)
+
         '''
         if self.inference=="decoder_rnn":
             if decoding=="greedy":
@@ -76,6 +77,7 @@ class NER(object):
             if decoding=="viterbi":
                 self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
         '''
+        
         return
 
     def load_data(self):
@@ -838,7 +840,7 @@ class NER(object):
         train_operation = optimizer.apply_gradients(zip(clipped_gradients, variables))
 
         return train_operation
-        
+
     def run_epoch(
                 self,
                 session,
