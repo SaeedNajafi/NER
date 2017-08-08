@@ -715,7 +715,7 @@ class NER(object):
                                                 (self.tag_size,),
                                                 dtype=tf.float32
                                             )
-                                        )
+                                        ),
                                     name = "tag_lookup_table",
                                     shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
