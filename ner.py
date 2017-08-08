@@ -732,7 +732,7 @@ class NER(object):
                                     )
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-	b_size = tf.shape(tag_embeddings)[0]
+        b_size = tf.shape(tag_embeddings)[0]
         #add GO symbol into the begining of every sentence.
         temp = []
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
@@ -746,8 +746,8 @@ class NER(object):
         temp = tf.stack(temp, axis=1)
 
         tag_embeddings_final = temp
-
-        self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+        with tf.variable_scope("decoder_lstm_cell") as scope
+            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=self.tag_size,
                                         use_peepholes=False,
                                         cell_clip=None,
@@ -761,8 +761,8 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
-	initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-	tag_scores, _ = tf.nn.dynamic_rnn(
+        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+        tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
                                     sequence_length=self.sentence_length_placeholder,
@@ -835,30 +835,28 @@ class NER(object):
 
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-
         H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
         preds = []
         outputs = []
-        for time_index in range(self.max_sentence_length):
-            if time_index==0:
-		tf.get_variable_scope().reuse_variables()
-                output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state)
-            else:
-		tf.get_variable_scope().reuse_variables()
-                prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
-                output, state = self.decoder_lstm_cell.call(prev_output, state)
+        with tf.variable_scope("decoder_lstm_cell") as scope:
+            for time_index in range(self.max_sentence_length):
+                if time_index==0:
+                    output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state)
+                else:
+                    prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
+                    output, state = self.decoder_lstm_cell.call(prev_output, state)
 
-            output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-            H_and_output = tf.concat([H_reshaped_t[time_index], output_dropped], axis=1)
+                output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                H_and_output = tf.concat([H_reshaped_t[time_index], output_dropped], axis=1)
 
-            pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-            preds.append(pred)
-            predictions = tf.nn.softmax(pred)
-            predicted_indices = tf.argmax(predictions, axis=1)
-            outputs.append(predicted_indices)
+                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+                preds.append(pred)
+                predictions = tf.nn.softmax(pred)
+                predicted_indices = tf.argmax(predictions, axis=1)
+                outputs.append(predicted_indices)
 
-        self.outputs = tf.stack(outputs, axis=1)
-        preds = tf.stack(preds, axis=1)
+            self.outputs = tf.stack(outputs, axis=1)
+            preds = tf.stack(preds, axis=1)
 
         self.decoding_loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=preds,
