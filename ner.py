@@ -726,9 +726,10 @@ class NER(object):
         with tf.variable_scope("tag_embedding_layer"):
             tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
-				    shape = (self.tag_size, self.tag_size),
+                                    shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
                                     trainable= False,
+                                    initializer = self.diag_initializer
                                     )
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
@@ -746,7 +747,8 @@ class NER(object):
         temp = tf.stack(temp, axis=1)
 
         tag_embeddings_final = temp
-        self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+        with tf.variable_scope('decoder_rnn') as scope:
+            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=self.tag_size,
                                         use_peepholes=False,
                                         cell_clip=None,
@@ -760,8 +762,8 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
-        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-        tag_scores, _ = tf.nn.dynamic_rnn(
+            initial_state = decoder_lstm_cell.zero_state(b_size, tf.float32)
+            tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
                                     sequence_length=self.sentence_length_placeholder,
@@ -770,7 +772,7 @@ class NER(object):
                                     parallel_iterations=None,
                                     swap_memory=False,
                                     time_major=False,
-                                    scope="decoder_rnn"
+                                    scope=scope
                                     )
 
         tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
@@ -806,6 +808,7 @@ class NER(object):
                         (-1, self.max_sentence_length, self.tag_size)
                         )
 
+
         loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=self.preds,
                                     targets=self.tag_placeholder,
@@ -813,6 +816,7 @@ class NER(object):
                                     average_across_timesteps=True,
                                     average_across_batch=True
                                     )
+
         return loss
 
     def greedy_decoding(self, H):
@@ -837,15 +841,13 @@ class NER(object):
         H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
         preds = []
         outputs = []
-        with tf.variable_scope("decoder_rnn") as scope:
+        with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
-		    tf.get_variable_scope().reuse_variables()
-                    output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state)
+                    output, state = self.decoder_lstm_cell.__call__(GO_symbol, initial_state, scope)
                 else:
                     prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
-		    tf.get_variable_scope().reuse_variables()
-                    output, state = self.decoder_lstm_cell.call(prev_output, state)
+                    output, state = self.decoder_lstm_cell.__call__(prev_output, state, scope)
 
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
                 H_and_output = tf.concat([H_reshaped_t[time_index], output_dropped], axis=1)
