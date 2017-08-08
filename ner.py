@@ -41,10 +41,10 @@ class NER(object):
 
 
     """path to different files"""
-    word_dic_path = './data/glove_en_word_100_dic_reduced.txt'
-    word_vectors_path = './data/glove_en_word_100_vectors_reduced.txt'
+    word_dic_path = './data/glove_en_word_100_dic.txt'
+    word_vectors_path = './data/glove_en_word_100_vectors.txt'
     char_dic_path = './data/en_char_dic.txt'
-    train_set_path = './data/eng.train.v1.reduced'
+    train_set_path = './data/eng.train.v1'
     dev_set_path = './data/eng.testa.v1'
     test_set_path = './data/eng.testb.v1'
 
@@ -762,7 +762,7 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
-            initial_state = decoder_lstm_cell.zero_state(b_size, tf.float32)
+            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
             tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
