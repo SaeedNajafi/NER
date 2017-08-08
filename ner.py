@@ -65,17 +65,17 @@ class NER(object):
             self.loss = self.train_by_decoder_rnn(H)
 
         self.train_op = self.add_training_op(self.loss)
-
+        '''
         if self.inference=="decoder_rnn":
             if decoding=="greedy":
-                self.decoding_op = self.greedy_decoding()
+                self.decoding_op = self.greedy_decoding(H)
 
             if decoding=="beamsearch":
-                self.decoding_op = self.beamsearch_decoding(self.beamsize)
+                self.decoding_op = self.beamsearch_decoding(H, self.beamsize)
 
             if decoding=="viterbi":
-                self.decoding_op = self.beamsearch_decoding(self.tag_size)
-
+                self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
+        '''
         return
 
     def load_data(self):
@@ -776,8 +776,8 @@ class NER(object):
                                     )
 
         tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-
-        H_and_tag_scores = tf.concat([H,tag_scores_dropped],axis=2)
+        tag_scores_dropped_reshaped = tf.reshape((-1, self.tag_size))
+        H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=2)
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
@@ -797,10 +797,7 @@ class NER(object):
 
             preds = tf.add(
                         tf.matmul(
-                            tf.reshape(
-                                H_and_tag_scores,
-                                (-1, self.word_hidden_units + self.tag_size)
-                            ),
+                            H_and_tag_scores,
                             U_softmax
                         ),
                         b_softmax
@@ -841,7 +838,7 @@ class NER(object):
         train_operation = optimizer.apply_gradients(zip(clipped_gradients, variables))
 
         return train_operation
-
+        
     def run_epoch(
                 self,
                 session,
