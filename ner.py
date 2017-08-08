@@ -734,12 +734,7 @@ class NER(object):
                                     )
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-<<<<<<< HEAD
 	b_size = tf.shape(tag_embeddings)[0]
-=======
-
-        b_size = tf.shape(tag_embeddings)[0]
->>>>>>> c184db0dccae51d16aa177e04246fb3b13981d72
         #add GO symbol into the begining of every sentence.
         temp = []
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
@@ -767,12 +762,8 @@ class NER(object):
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
-<<<<<<< HEAD
 
 	initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-=======
-        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
->>>>>>> c184db0dccae51d16aa177e04246fb3b13981d72
         tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
