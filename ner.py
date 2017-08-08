@@ -762,7 +762,7 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
-            initial_state = decoder_lstm_cell.zero_state(b_size, tf.float32)
+            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
             tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
