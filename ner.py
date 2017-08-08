@@ -41,10 +41,10 @@ class NER(object):
 
 
     """path to different files"""
-    word_dic_path = './data/glove_en_word_100_dic.txt'
-    word_vectors_path = './data/glove_en_word_100_vectors.txt'
+    word_dic_path = './data/glove_en_word_100_dic_reduced.txt'
+    word_vectors_path = './data/glove_en_word_100_vectors_reduced.txt'
     char_dic_path = './data/en_char_dic.txt'
-    train_set_path = './data/eng.train.v1'
+    train_set_path = './data/eng.train.v1.reduced'
     dev_set_path = './data/eng.testa.v1'
     test_set_path = './data/eng.testb.v1'
 
@@ -746,8 +746,7 @@ class NER(object):
         temp = tf.stack(temp, axis=1)
 
         tag_embeddings_final = temp
-        with tf.variable_scope("decoder_lstm_cell") as scope
-            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+        self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=self.tag_size,
                                         use_peepholes=False,
                                         cell_clip=None,
@@ -838,12 +837,14 @@ class NER(object):
         H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
         preds = []
         outputs = []
-        with tf.variable_scope("decoder_lstm_cell") as scope:
+        with tf.variable_scope("decoder_rnn") as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
+		    tf.get_variable_scope().reuse_variables()
                     output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state)
                 else:
                     prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
+		    tf.get_variable_scope().reuse_variables()
                     output, state = self.decoder_lstm_cell.call(prev_output, state)
 
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
