@@ -849,8 +849,8 @@ class NER(object):
                     prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
                     output, state = self.decoder_lstm_cell.call(prev_output, state, scope)
 
-                output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-                H_and_output = tf.concat([H_reshaped_t[time_index], output_dropped], axis=1)
+
+                H_and_output = tf.concat([H_reshaped_t[time_index], output], axis=1)
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 preds.append(pred)
