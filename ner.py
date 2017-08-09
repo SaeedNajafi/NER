@@ -844,10 +844,10 @@ class NER(object):
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
-                    output, state = self.decoder_lstm_cell.call(GO_symbol, initial_state, scope)
+                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
                 else:
                     prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
-                    output, state = self.decoder_lstm_cell.call(prev_output, state, scope)
+                    output, state = self.decoder_lstm_cell(prev_output, state, scope)
 
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
                 H_and_output = tf.concat([H_reshaped_t[time_index], output_dropped], axis=1)
