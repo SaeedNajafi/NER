@@ -766,7 +766,7 @@ class NER(object):
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
                                     sequence_length=self.sentence_length_placeholder,
-                                    initial_state=initial_state,
+                                    initial_state=None,
                                     dtype=tf.float32,
                                     parallel_iterations=None,
                                     swap_memory=False,
