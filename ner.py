@@ -69,13 +69,13 @@ class NER(object):
 
         if self.inference=="decoder_rnn":
             if self.decoding=="greedy":
-                self.decoding_op = self.greedy_decoding(H)
+                self.greedy_decoding(H)
 
             if self.decoding=="beamsearch":
-                self.decoding_op = self.beamsearch_decoding(H, self.beamsize)
+                self.beamsearch_decoding(H, self.beamsize)
 
             if self.decoding=="viterbi":
-                self.decoding_op = self.beamsearch_decoding(H, self.tag_size)
+                self.beamsearch_decoding(H, self.tag_size)
         return
 
     def load_data(self):
@@ -1097,9 +1097,8 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                    _, batch_predicted_indices, loss = session.run(
+                    batch_predicted_indices, loss = session.run(
                                                         [
-                                                            self.decoding_op,
                                                             self.outputs,
                                                             self.decoding_loss
                                                         ],
@@ -1108,9 +1107,8 @@ class NER(object):
 
                     losses.append(loss)
                 else:
-                    _, batch_predicted_indices = session.run(
+                    batch_predicted_indices = session.run(
                                                         [
-                                                            self.decoding_op,
                                                             self.outputs
                                                         ],
                                                         feed_dict=feed
