@@ -735,7 +735,9 @@ class NER(object):
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
         b_size = tf.shape(tag_embeddings)[0]
-        #add GO symbol into the begining of every sentence.
+        #add GO symbol into the begining of every sentence and
+        #shift rest by one position.
+        
         temp = []
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
