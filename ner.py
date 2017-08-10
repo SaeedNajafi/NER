@@ -745,8 +745,6 @@ class NER(object):
             else:
                 temp.append(tag_embeddings_t[time_index-1])
 
-        temp.append(tag_embeddings_t[self.max_sentence_length-1])
-
         temp = tf.stack(temp, axis=1)
 
         tag_embeddings_final = temp
