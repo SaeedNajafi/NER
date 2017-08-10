@@ -729,7 +729,7 @@ class NER(object):
                                     name = "tag_lookup_table",
                                     shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
-                                    trainable= True,
+                                    trainable= False,
                                     initializer = self.diag_initializer
                                     )
 
@@ -743,7 +743,9 @@ class NER(object):
             if time_index==0:
                 temp.append(GO_symbol)
             else:
-                temp.append(tag_embeddings_t[time_index])
+                temp.append(tag_embeddings_t[time_index-1])
+
+        temp.append(tag_embeddings_t[self.max_sentence_length-1])
 
         temp = tf.stack(temp, axis=1)
 
