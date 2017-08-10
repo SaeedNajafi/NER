@@ -745,8 +745,6 @@ class NER(object):
             else:
                 temp.append(tag_embeddings_t[time_index-1])
 
-        temp.append(tag_embeddings_t[self.max_sentence_length-1])
-
         temp = tf.stack(temp, axis=1)
 
         tag_embeddings_final = temp
@@ -873,8 +871,8 @@ class NER(object):
 
         return
 
-        def beamsearch_decoding(self, H, beamsize):
-            return
+    def beamsearch_decoding(self, H, beamsize):
+        return
 
     def add_training_op(self, loss):
         """Sets up the training Ops.
