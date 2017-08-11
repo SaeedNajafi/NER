@@ -53,7 +53,7 @@ class NER(object):
         self.load_data()
         self.add_placeholders()
         char_embed, word_embed, cap_embed = self.add_embedding()
-        H = self.add_model(char_embed, word_embed, cap_embed)
+        H = self.encoder(char_embed, word_embed, cap_embed)
 
         if self.inference=="softmax":
             loss = self.train_by_softmax(H)
@@ -229,31 +229,38 @@ class NER(object):
                                             shape=(
                                                 None,
                                                 self.max_sentence_length,
-                                                self.max_word_length))
+                                                self.max_word_length)
+                                            )
 
         self.word_length_placeholder = tf.placeholder(
                                             tf.int32,
-                                            shape=(None, self.max_sentence_length))
+                                            shape=(None, self.max_sentence_length)
+                                            )
 
         self.cap_input_placeholder = tf.placeholder(
                                         dtype=tf.int32,
-                                        shape=(None, self.max_sentence_length))
+                                        shape=(None, self.max_sentence_length)
+                                        )
 
         self.word_input_placeholder = tf.placeholder(
                                         dtype=tf.int32,
-                                        shape=(None, self.max_sentence_length))
+                                        shape=(None, self.max_sentence_length)
+                                        )
 
         self.word_mask_placeholder = tf.placeholder(
                                         dtype=tf.float32,
-                                        shape=(None, self.max_sentence_length))
+                                        shape=(None, self.max_sentence_length)
+                                        )
 
         self.sentence_length_placeholder = tf.placeholder(
                                                 dtype=tf.int32,
-                                                shape=(None,))
+                                                shape=(None,)
+                                                )
 
         self.tag_placeholder = tf.placeholder(
                                     dtype=tf.int32,
-                                    shape=(None, self.max_sentence_length))
+                                    shape=(None, self.max_sentence_length)
+                                    )
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
@@ -367,7 +374,7 @@ class NER(object):
         out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
         return out
 
-    def add_model(self, char_embeddings, word_embeddings, cap_embeddings):
+    def encoder(self, char_embeddings, word_embeddings, cap_embeddings):
 
         #current batch_size
         b_size = tf.shape(word_embeddings)[0]
@@ -415,7 +422,6 @@ class NER(object):
 
         #character-level bidirectional rnn to
         #construct prefix and suffix information for each word.
-
         (char_h_fw, char_h_bw), _ = tf.nn.bidirectional_dynamic_rnn(
                                     forward_char_level_lstm,
                                     backward_char_level_lstm,
@@ -485,7 +491,7 @@ class NER(object):
         ##################################     End    ##################################
 
 
-        """ combine character-level embeddings with word-level embeddings"""
+        """ concat prefix/suffix information with word-level embeddings"""
         char_final_embeddings = tf.concat([fwd_char, bck_char], 2)
         t = tf.concat([char_final_embeddings, word_embeddings], 2)
         final_embeddings = tf.nn.dropout(t, self.dropout_placeholder)
@@ -493,7 +499,7 @@ class NER(object):
         #consider capatilization patterns.
         final_embeddings = tf.concat([final_embeddings, cap_embeddings], axis=2)
 
-        #Creating context embeddings with respect to the window size = 5
+        #Creating context with respect to the window size = 5
         temp = []
         zeros = tf.zeros(
                 (b_size, self.word_embedding_size +  2 * self.char_rnn_hidden_units + 4),
@@ -753,6 +759,7 @@ class NER(object):
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
         b_size = tf.shape(tag_embeddings)[0]
+
         #add GO symbol into the begining of every sentence and
         #shift rest by one position.
 
@@ -851,7 +858,7 @@ class NER(object):
             U_softmax = tf.get_variable("U_softmax")
             b_softmax = tf.get_variable("b_softmax")
 
-        #we need to reload the tag embedding layer.
+        #reloading the tag embedding layer.
         with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable("tag_lookup_table")
 
@@ -1194,7 +1201,7 @@ class NER(object):
                     feed[self.tag_placeholder] = tag_data
 
                 batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
-                results.append(batch_predicted_indices.eval().tolist())
+                results.append(batch_predicted_indices)
 
         if len(losses)==0:
             return 0, results
@@ -1214,7 +1221,7 @@ class NER(object):
         """Saves predictions to the provided file."""
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
-                batch_predictions = np.array(predictions[batch_index])
+                batch_predictions = predictions[batch_index]
                 b_size = batch_predictions.shape[0]
                 for sentence_index in range(b_size):
                     for word_index in range(self.max_sentence_length):
