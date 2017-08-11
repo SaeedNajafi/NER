@@ -30,13 +30,8 @@ class NER(object):
 
     """inference type"""
     #inference = "softmax"
-<<<<<<< HEAD
     #inference = "crf"
     inference = "decoder_rnn"
-=======
-    inference = "crf"
-    #inference = "decoder_rnn"
->>>>>>> 5e7d08b1fcebe8548af749e682b4695c7d174c62
 
     """for decoder_rnn"""
     decoding="greedy"
@@ -801,7 +796,7 @@ class NER(object):
                                     )
 
         tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-        H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=2)
+        H_and_tag_scores = tf.concat([H,tag_scores_dropped], axis=2)
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
