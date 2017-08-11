@@ -36,7 +36,7 @@ class NER(object):
     """for decoder_rnn"""
     decoding="greedy"
     #decoding="beamsearch"
-    beamsize=4
+    #beamsize=4
     #decoding="viterbi"
 
 
@@ -1214,8 +1214,10 @@ class NER(object):
         """Saves predictions to the provided file."""
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
-                batch_predictions = np.array(predictions[batch_index])
-                b_size = batch_predictions.shape[0]
+                batch_predictions = predictions[batch_index]
+		print batch_predictions[0]
+		print batch_predictions[1]
+                b_size = len(batch_predictions)
                 for sentence_index in range(b_size):
                     for word_index in range(self.max_sentence_length):
                         ad = (batch_index * self.batch_size) + sentence_index
