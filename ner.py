@@ -14,8 +14,8 @@ class NER(object):
     """ Model hyperparams and data information """
     word_embedding_size = 100
     char_embedding_size = 25
-    word_hidden_units = 100
-    char_hidden_units = 25
+    word_rnn_hidden_units = 100
+    char_rnn_hidden_units = 25
 
     max_sentence_length = 150
     max_word_length = 25
@@ -29,9 +29,9 @@ class NER(object):
     early_stopping = 2
 
     """inference type"""
-    #inference = "softmax"
+    inference = "softmax"
     #inference = "crf"
-    inference = "decoder_rnn"
+    #inference = "decoder_rnn"
 
     """for decoder_rnn"""
     decoding="greedy"
@@ -56,17 +56,17 @@ class NER(object):
         H = self.add_model(char_embed, word_embed, cap_embed)
 
         if self.inference=="softmax":
-            self.loss = self.predict_by_softmax(H)
+            loss = self.train_by_softmax(H)
 
         elif self.inference=="crf":
-            self.loss = self.predict_by_crf(H)
+            loss = self.train_by_crf(H)
 
         elif self.inference=="decoder_rnn":
-            self.loss = self.train_by_decoder_rnn(H)
+            loss = self.train_by_decoder_rnn(H)
 
-        self.train_op = self.add_training_op(self.loss)
+        self.train_op = self.add_training_op(loss)
 
-
+        '''
         if self.inference=="decoder_rnn":
             if self.decoding=="greedy":
                 self.greedy_decoding(H)
@@ -76,6 +76,7 @@ class NER(object):
 
             if self.decoding=="viterbi":
                 self.beamsearch_decoding(H, self.tag_size)
+        '''
         return
 
     def load_data(self):
@@ -376,13 +377,13 @@ class NER(object):
 
 
 
-        ##################################     prefix and suffix information extracting    ##################################
+        ################################## prefix and suffix information extracting ##################################
         char_embeddings_t = tf.reshape(char_embeddings,
                             [-1, self.max_word_length, self.char_embedding_size])
 
         #character-level forward lstm cell
         forward_char_level_lstm = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.char_hidden_units,
+                                        num_units=self.char_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -397,7 +398,7 @@ class NER(object):
 
         #character-level backward lstm cell
         backward_char_level_lstm = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.char_hidden_units,
+                                        num_units=self.char_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -414,8 +415,9 @@ class NER(object):
                                     self.word_length_placeholder,
                                     (b_size * self.max_sentence_length,))
 
-        #character-level bidirectional rnn to construct prefix and suffix information
-        #for each word.
+        #character-level bidirectional rnn to
+        #construct prefix and suffix information for each word.
+
         (char_h_fw, char_h_bw), _ = tf.nn.bidirectional_dynamic_rnn(
                                     forward_char_level_lstm,
                                     backward_char_level_lstm,
@@ -434,27 +436,38 @@ class NER(object):
 
         #batch index
         b_index = tf.reshape(
-                    tf.multiply(
-                    tf.range(0, b_size), self.max_word_length * self.max_sentence_length),
-                    (b_size, 1))
+                        tf.multiply(
+                            tf.range(0, b_size),
+                            self.max_word_length * self.max_sentence_length
+                            ),
+                        (b_size, 1)
+                        )
 
         #sentence index
         s_index = tf.reshape(
-                    tf.multiply(
-                    tf.range(0, self.max_sentence_length), self.max_word_length),
-                    (1, self.max_sentence_length))
+                        tf.multiply(
+                            tf.range(0, self.max_sentence_length),
+                            self.max_word_length
+                            ),
+                        (1, self.max_sentence_length)
+                        )
 
         #index for last character of each word
         index = tf.add(
                     tf.add(b_index, s_index),
-                    tf.subtract(self.word_length_placeholder, 1))
+                    tf.subtract(self.word_length_placeholder, 1)
+                    )
 
         #select last character's hidden state as suffix information for each word
         fwd_char = tf.gather(
                     tf.reshape(
                         char_h_fw,
-                        [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
-                    index)
+                        [b_size * self.max_sentence_length * self.max_word_length,
+                        self.char_rnn_hidden_units]
+                    ),
+                    index
+                    )
+
 
 
 
@@ -466,9 +479,12 @@ class NER(object):
         bck_char = tf.gather(
                     tf.reshape(
                         char_h_bw,
-                        [b_size * self.max_sentence_length * self.max_word_length, self.char_hidden_units]),
-                    index)
-        ##################################     prefix and suffix information extracting    ##################################
+                        [b_size * self.max_sentence_length * self.max_word_length,
+                         self.char_rnn_hidden_units]
+                    ),
+                    index
+                    )
+        ##################################     End    ##################################
 
 
         """ combine character-level embeddings with word-level embeddings"""
@@ -481,7 +497,10 @@ class NER(object):
 
         #Creating context embeddings with respect to the window size = 5
         temp = []
-        zeros = tf.zeros((b_size, self.word_embedding_size +  2 * self.char_hidden_units + 4), dtype=tf.float32)
+        zeros = tf.zeros(
+                (b_size, self.word_embedding_size +  2 * self.char_rnn_hidden_units + 4),
+                dtype=tf.float32
+                )
         final_embeddings_t = tf.transpose(final_embeddings, [1,0,2])
         for time_index in range(self.max_sentence_length):
             if time_index == 0:
@@ -534,7 +553,7 @@ class NER(object):
 
         ##################################     word-level encoder    ##################################
         forward_word_level_lstm = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.word_hidden_units,
+                                        num_units=self.word_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -548,7 +567,7 @@ class NER(object):
                                         )
 
         backward_word_level_lstm = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.word_hidden_units,
+                                        num_units=self.word_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -583,20 +602,20 @@ class NER(object):
                                         self.dropout_placeholder
                                     )
 
-        ##################################     word-level encoder    ##################################
+        ##################################     End   ##################################
 
         """hidden layer"""
         with tf.variable_scope("hidden"):
             U_hidden = tf.get_variable(
                             "U_hidden",
-                            (2 * self.word_hidden_units, self.word_hidden_units),
+                            (2 * self.word_rnn_hidden_units, self.word_rnn_hidden_units),
                             tf.float32,
                             self.xavier_initializer
                             )
 
             b_hidden = tf.get_variable(
                             "b_hidden",
-                            (self.word_hidden_units,),
+                            (self.word_rnn_hidden_units,),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
@@ -606,17 +625,18 @@ class NER(object):
                         tf.matmul(
                             tf.reshape(
                                 dropped_encoder_final_hs,
-                                (-1, 2  *  self.word_hidden_units)
+                                (-1, 2  *  self.word_rnn_hidden_units)
                             ),
                             U_hidden
                         ),
                         b_hidden
                     )
             H = tf.tanh(H)
+            H = tf.reshape(H, (-1, self.max_sentence_length, self.word_rnn_hidden_units))
 
         return H
 
-    def predict_by_softmax(self, H):
+    def train_by_softmax(self, H):
 
         """
         Apply a softmax layer to get a probability for each tag.
@@ -627,7 +647,7 @@ class NER(object):
         with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
-                            (self.word_hidden_units, self.tag_size),
+                            (self.word_rnn_hidden_units, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
@@ -643,7 +663,7 @@ class NER(object):
                         tf.matmul(
                             tf.reshape(
                                 H,
-                                (-1, self.word_hidden_units)
+                                (-1, self.word_rnn_hidden_units)
                             ),
                             U_softmax
                         ),
@@ -656,7 +676,7 @@ class NER(object):
                         )
 
         self.predictions = tf.nn.softmax(self.preds)
-        loss = tf.contrib.seq2seq.sequence_loss(
+        self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=self.preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
@@ -664,9 +684,9 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
-        return loss
+        return self.loss
 
-    def predict_by_crf(self, H):
+    def train_by_crf(self, H):
 
         """
         Apply a crf layer to get a probability for each tag.
@@ -677,7 +697,7 @@ class NER(object):
         with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
-                            (self.word_hidden_units, self.tag_size),
+                            (self.word_rnn_hidden_units, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
@@ -694,7 +714,7 @@ class NER(object):
                         tf.matmul(
                             tf.reshape(
                                 H,
-                                (-1, self.word_hidden_units)
+                                (-1, self.word_rnn_hidden_units)
                             ),
                             U_softmax
                         ),
@@ -712,9 +732,9 @@ class NER(object):
                                                             self.sentence_length_placeholder
                                                             )
 
-        loss = tf.reduce_mean(-self.log_likelihood)
+        self.loss = tf.reduce_mean(-self.log_likelihood)
 
-        return loss
+        return self.loss
 
     def train_by_decoder_rnn(self, H):
 
@@ -785,7 +805,7 @@ class NER(object):
         with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
-                            (self.word_hidden_units + self.tag_size, self.tag_size),
+                            (self.word_rnn_hidden_units + self.tag_size, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
@@ -824,7 +844,7 @@ class NER(object):
     def greedy_decoding(self, H):
 
         #batch size
-        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_hidden_units))
+        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_rnn_hidden_units))
         b_size = tf.shape(H_reshaped)[0]
 
         """Reload softmax prediction layer"""
@@ -876,7 +896,7 @@ class NER(object):
     def beamsearch_decoding(self, H, beamsize):
 
         #batch size
-        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_hidden_units))
+        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_rnn_hidden_units))
         b_size = tf.shape(H_reshaped)[0]
 
         """Reload softmax prediction layer"""
@@ -1042,7 +1062,7 @@ class NER(object):
                                 )
             else:
                 loss, _, _ = session.run(
-                                [self.loss, self.train_op, self.predictions],
+                                [self.loss, self.predictions, self.train_op],
                                 feed_dict=feed
                                 )
 
@@ -1056,6 +1076,7 @@ class NER(object):
                                                             np.mean(total_loss)
                                                             )
                                 )
+
                 sys.stdout.flush()
             if verbose:
                 sys.stdout.write('\r')
@@ -1275,7 +1296,7 @@ def run_NER():
                                         model.Y_train
                                         )
 
-                val_loss , predictions = model.predict(
+                _ , predictions = model.predict(
                                         session,
                                         model.char_X_dev,
                                         model.word_length_X_dev,
@@ -1287,7 +1308,6 @@ def run_NER():
                                         )
 
                 print 'Training loss: {}'.format(train_loss)
-                print 'Validation loss: {}'.format(val_loss)
                 model.save_predictions(
                                 predictions,
                                 model.sentence_length_X_dev,
@@ -1301,8 +1321,8 @@ def run_NER():
                 print 'Validation fscore: {}'.format(val_fscore)
                 print 'Validation fscore loss: {}'.format(val_fscore_loss)
 
-                if  val_fscore_loss + val_loss < best_val_loss:
-                    best_val_loss = val_loss + val_fscore_loss
+                if  val_fscore_loss < best_val_loss:
+                    best_val_loss = val_fscore_loss
                     best_val_epoch = epoch
                     if not os.path.exists("./weights"):
                         os.makedirs("./weights")
@@ -1335,7 +1355,7 @@ def run_NER():
                                                 )
 
             print 'Dev loss: {}'.format(dev_loss)
-            print 'Total test time: {} seconds'.format(time.time() - start)
+            print 'Total prediction time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to dev.predicted'
             model.save_predictions(
                                 predictions,
@@ -1361,7 +1381,7 @@ def run_NER():
                                                 )
 
             print 'Test loss: {}'.format(test_loss)
-            print 'Total test time: {} seconds'.format(time.time() - start)
+            print 'Total prediction time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to test.predicted'
             model.save_predictions(
                                 predictions,
