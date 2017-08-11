@@ -29,8 +29,8 @@ class NER(object):
     early_stopping = 2
 
     """inference type"""
-    inference = "softmax"
-    #inference = "crf"
+    #inference = "softmax"
+    inference = "crf"
     #inference = "decoder_rnn"
 
     """for decoder_rnn"""
@@ -364,7 +364,7 @@ class NER(object):
                                 dtype=tf.float32)
 
         return out
-        
+
     def diag_initializer(self, shape, **kargs):
         out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
         return out
