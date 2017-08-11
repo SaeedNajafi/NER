@@ -891,8 +891,7 @@ class NER(object):
     def beamsearch_decoding(self, H, beamsize):
 
         #batch size
-        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_rnn_hidden_units))
-        b_size = tf.shape(H_reshaped)[0]
+        b_size = tf.shape(H)[0]
 
         """Reload softmax prediction layer"""
         with tf.variable_scope("softmax", reuse=True):
@@ -907,14 +906,14 @@ class NER(object):
         candidates= []
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-        H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
+        H_t = tf.transpose(H, [1,0,2])
         preds = []
         outputs = []
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
                     output, state = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
-                    H_and_output = tf.concat([H_reshaped_t[time_index], output], axis=1)
+                    H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                     predictions = tf.nn.softmax(pred)
                     probs, indices = tf.nn.top_k(predictions, k=beamsize, sorted=True)
@@ -935,7 +934,7 @@ class NER(object):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, beam[b][0][-1])
                         output, state = self.decoder_lstm_cell(prev_output, beam[b][2], scope)
 
-                        H_and_output = tf.concat([H_reshaped_t[time_index], output], axis=1)
+                        H_and_output = tf.concat([H_t[time_index], output], axis=1)
                         pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                         predictions = tf.nn.softmax(pred)
                         probs, indices = tf.nn.top_k(predictions, k=beamsize, sorted=True)
@@ -952,27 +951,23 @@ class NER(object):
                             new_beam.append(new_state)
                             candidates.append(new_beam)
                     temp = []
-                    for b in range(beamsize):
-                        for i in range(beamsize):
-                            temp.append(candidates[b*beamsize + i][1])
+                    for i in range(beamsize):
+                        for j in range(beamsize):
+                            temp.append(candidates[i*beamsize + j][1])
 
                     temp = tf.stack(temp, axis=1)
                     _, max_indices = tf.nn.top_k(temp, k=beamsize, sorted=True)
+
+                    del beam[:]
                     beam = []
                     for i in range(beamsize):
                         beam[i] = candidates[max_indices[i]]
+
+                    del candidates[:]
                     candidates = []
 
             self.outputs = tf.stack(outputs, axis=1)
             preds = tf.stack(preds, axis=1)
-
-        self.decoding_loss = tf.contrib.seq2seq.sequence_loss(
-                                        logits=preds,
-                                        targets=self.tag_placeholder,
-                                        weights=self.word_mask_placeholder,
-                                        average_across_timesteps=True,
-                                        average_across_batch=True
-                                        )
 
         return
 
@@ -1222,7 +1217,7 @@ class NER(object):
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
                 batch_predictions = predictions[batch_index]
-                b_size = batch_predictions.shape[0]
+                b_size = len(batch_predictions)
                 for sentence_index in range(b_size):
                     for word_index in range(self.max_sentence_length):
                         ad = (batch_index * self.batch_size) + sentence_index
