@@ -40,6 +40,7 @@ def docs_to_sentences(docs, word_to_num, tag_to_num, char_to_num):
     caps = [capalize_word(w) for w in words]
     words = [canonicalize_word(w, word_to_num) for w in words]
     tags = [t.split("|")[0] for t in tags]
+    iob2(tags)
     tags = iob_iobes(tags)
     return seq_to_sentences(
                         unchanged_words,
@@ -96,6 +97,28 @@ def iob_iobes(tags):
         else:
             raise Exception('Invalid IOB format!')
     return new_tags
+
+#https://github.com/glample/tagger/blob/master/utils.py
+def iob2(tags):
+    """
+    Check that tags have a valid IOB format.
+    Tags in IOB1 format are converted to IOB2.
+    """
+    for i, tag in enumerate(tags):
+        if tag == 'O':
+            continue
+        split = tag.split('-')
+        if len(split) != 2 or split[0] not in ['I', 'B']:
+            return False
+        if split[0] == 'B':
+            continue
+        elif i == 0 or tags[i - 1] == 'O':  # conversion IOB1 to IOB2
+            tags[i] = 'B' + tag[1:]
+        elif tags[i - 1][1:] == tag[1:]:
+            continue
+        else:  # conversion IOB1 to IOB2
+            tags[i] = 'B' + tag[1:]
+    return True
 
 #https://github.com/glample/tagger/blob/master/loader.py
 def capalize_word(word):
