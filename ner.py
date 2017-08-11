@@ -30,8 +30,13 @@ class NER(object):
 
     """inference type"""
     #inference = "softmax"
+<<<<<<< HEAD
     #inference = "crf"
     inference = "decoder_rnn"
+=======
+    inference = "crf"
+    #inference = "decoder_rnn"
+>>>>>>> 5e7d08b1fcebe8548af749e682b4695c7d174c62
 
     """for decoder_rnn"""
     decoding="greedy"
