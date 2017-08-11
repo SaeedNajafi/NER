@@ -51,17 +51,6 @@ def docs_to_sentences(docs, word_to_num, tag_to_num, char_to_num):
                         char_to_num
                         )
 
-def convert_to_iob(batch, num_to_tag, tag_to_num):
-	new_batch = []
-	for b_index in range(len(batch)):
-		sentence = batch[b_index]
-		new_sentence =[num_to_tag[w] for w in sentence]
-		new_sentence = iobes_iob(new_sentence)
-		new_sentence = [tag_to_num[w] for w in new_sentence]
-		new_batch.append(new_sentence)
-
-	return new_batch
-
 #https://github.com/glample/tagger/blob/master/utils.py
 def iobes_iob(tags):
     """
