@@ -40,8 +40,13 @@ def docs_to_sentences(docs, word_to_num, tag_to_num, char_to_num):
     caps = [capalize_word(w) for w in words]
     words = [canonicalize_word(w, word_to_num) for w in words]
     tags = [t.split("|")[0] for t in tags]
+
+    #converting tags from IOB format to IOB2.
     iob2(tags)
+
+    #converting tags from IOB2 format to IOBES format.
     tags = iob_iobes(tags)
+
     return seq_to_sentences(
                         unchanged_words,
                         caps,
