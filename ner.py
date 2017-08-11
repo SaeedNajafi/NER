@@ -36,7 +36,7 @@ class NER(object):
     """for decoder_rnn"""
     decoding="greedy"
     #decoding="beamsearch"
-    beamsize=4
+    #beamsize=4
     #decoding="viterbi"
 
 
@@ -1196,7 +1196,7 @@ class NER(object):
                     feed[self.tag_placeholder] = tag_data
 
                 batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
-                results.append(batch_predicted_indices)
+                results.append(batch_predicted_indices[0])
 
         if len(losses)==0:
             return 0, results
