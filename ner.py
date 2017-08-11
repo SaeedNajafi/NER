@@ -29,14 +29,14 @@ class NER(object):
     early_stopping = 2
 
     """inference type"""
-    inference = "softmax"
+    #inference = "softmax"
     #inference = "crf"
-    #inference = "decoder_rnn"
+    inference = "decoder_rnn"
 
     """for decoder_rnn"""
     decoding="greedy"
     #decoding="beamsearch"
-    #beamsize=4
+    beamsize=4
     #decoding="viterbi"
 
 
@@ -64,10 +64,6 @@ class NER(object):
         elif self.inference=="decoder_rnn":
             loss = self.train_by_decoder_rnn(H)
 
-        self.train_op = self.add_training_op(loss)
-
-        '''
-        if self.inference=="decoder_rnn":
             if self.decoding=="greedy":
                 self.greedy_decoding(H)
 
@@ -76,7 +72,9 @@ class NER(object):
 
             if self.decoding=="viterbi":
                 self.beamsearch_decoding(H, self.tag_size)
-        '''
+
+        self.train_op = self.add_training_op(loss)
+
         return
 
     def load_data(self):
@@ -364,7 +362,7 @@ class NER(object):
                                 dtype=tf.float32)
 
         return out
-        
+
     def diag_initializer(self, shape, **kargs):
         out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
         return out
@@ -749,7 +747,7 @@ class NER(object):
                                     name = "tag_lookup_table",
                                     shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
-                                    trainable= False,
+                                    trainable= True,
                                     initializer = self.diag_initializer
                                     )
 
@@ -798,8 +796,7 @@ class NER(object):
                                     )
 
         tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-        tag_scores_dropped_reshaped = tf.reshape(tag_scores_dropped, (-1, self.tag_size))
-        H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=1)
+        H_and_tag_scores = tf.concat([H,tag_scores_dropped_reshaped], axis=2)
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
@@ -819,19 +816,22 @@ class NER(object):
 
             preds = tf.add(
                         tf.matmul(
-                            H_and_tag_scores,
+                            tf.reshape(
+                                H_and_tag_scores,
+                                (-1, self.word_rnn_hidden_units + self.tag_size)
+                            ),
                             U_softmax
                         ),
                         b_softmax
                     )
 
             self.preds = tf.reshape(
-                        preds,
-                        (-1, self.max_sentence_length, self.tag_size)
+                            preds,
+                            (-1, self.max_sentence_length, self.tag_size)
                         )
 
 
-        loss = tf.contrib.seq2seq.sequence_loss(
+        self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=self.preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
@@ -839,13 +839,12 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
-        return loss
+        return self.loss
 
     def greedy_decoding(self, H):
 
         #batch size
-        H_reshaped = tf.reshape(H, (-1, self.max_sentence_length, self.word_rnn_hidden_units))
-        b_size = tf.shape(H_reshaped)[0]
+        b_size = tf.shape(H)[0]
 
         """Reload softmax prediction layer"""
         with tf.variable_scope("softmax", reuse=True):
@@ -860,8 +859,7 @@ class NER(object):
 
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-        H_reshaped_t = tf.transpose(H_reshaped, [1,0,2])
-        preds = []
+        H_t = tf.transpose(H, [1,0,2])
         outputs = []
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
@@ -872,24 +870,14 @@ class NER(object):
                     output, state = self.decoder_lstm_cell(prev_output, state, scope)
 
 
-                H_and_output = tf.concat([H_reshaped_t[time_index], output], axis=1)
+                H_and_output = tf.concat([H_t[time_index], output], axis=1)
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-                preds.append(pred)
                 predictions = tf.nn.softmax(pred)
                 predicted_indices = tf.argmax(predictions, axis=1)
                 outputs.append(predicted_indices)
 
             self.outputs = tf.stack(outputs, axis=1)
-            preds = tf.stack(preds, axis=1)
-
-        self.decoding_loss = tf.contrib.seq2seq.sequence_loss(
-                                    logits=preds,
-                                    targets=self.tag_placeholder,
-                                    weights=self.word_mask_placeholder,
-                                    average_across_timesteps=True,
-                                    average_across_batch=True
-                                    )
 
         return
 
@@ -1205,23 +1193,7 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                    batch_predicted_indices, loss = session.run(
-                                                        [
-                                                            self.outputs,
-                                                            self.decoding_loss
-                                                        ],
-                                                        feed_dict=feed
-                                                        )
-
-                    losses.append(loss)
-                else:
-                    batch_predicted_indices = session.run(
-                                                        [
-                                                            self.outputs
-                                                        ],
-                                                        feed_dict=feed
-                                                        )
-
+                batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
                 results.append(batch_predicted_indices)
 
         if len(losses)==0:
