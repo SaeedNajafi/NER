@@ -1201,7 +1201,7 @@ class NER(object):
                     feed[self.tag_placeholder] = tag_data
 
                 batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
-                results.append(batch_predicted_indices)
+                results.append(batch_predicted_indices[0])
 
         if len(losses)==0:
             return 0, results
@@ -1222,9 +1222,7 @@ class NER(object):
         with open(filename, "wb") as f:
             for batch_index in range(len(predictions)):
                 batch_predictions = predictions[batch_index]
-		print batch_predictions[0]
-		print batch_predictions[1]
-                b_size = len(batch_predictions)
+		b_size = len(batch_predictions)
                 for sentence_index in range(b_size):
                     for word_index in range(self.max_sentence_length):
                         ad = (batch_index * self.batch_size) + sentence_index
