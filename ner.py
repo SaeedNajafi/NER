@@ -960,8 +960,27 @@ class NER(object):
 
                     del beam[:]
                     beam = []
+                    np_max_indices = max_indices.eval()
+                    indices = []
+                    scores = []
+                    states = []
                     for i in range(beamsize):
-                        beam[i] = candidates[max_indices[i]]
+                        indices = []
+                        scores = []
+                        states = []
+                        for j in range(b_size):
+                            indices[j] = tf.stack([t[j] for t in candidates[np_max_indices[i][j]][0]], axis=0)
+                            scores[j] = candidates[np_max_indices[i][j]][1][j]
+                            states[j] = candidates[np_max_indices[i][j]][2][j]
+
+                        indices = tf.split(tf.stack(indices, axis=0), axis=1)
+                        scores = tf.stack(scores, axis=0)
+                        states = tf.stack(states, axis=0)
+                        new_beam = []
+                        new_beam.append(indices)
+                        new_beam.append(scores)
+                        new_beam.append(states)
+                        beam.append(new_beam)
 
                     del candidates[:]
                     candidates = []
