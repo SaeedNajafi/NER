@@ -67,11 +67,8 @@ class NER(object):
             if self.decoding=="greedy":
                 self.greedy_decoding(H)
 
-            if self.decoding=="beamsearch":
-                self.beamsearch_decoding(H, self.beamsize)
-
-            if self.decoding=="viterbi":
-                self.beamsearch_decoding(H, self.tag_size)
+            if self.decoding=="beamsearch" or self.decoding=="viterbi":
+                self.H = H
 
         self.train_op = self.add_training_op(loss)
 
@@ -985,9 +982,9 @@ class NER(object):
                     del candidates[:]
                     candidates = []
 
-            self.outputs = tf.stack(beam[0][0], axis=1)
+            outputs = tf.stack(beam[0][0], axis=1)
 
-        return
+        return outputs
 
     def add_training_op(self, loss):
         """Sets up the training Ops.
@@ -1213,7 +1210,12 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
+                H = session.run([self.H], feed_dict=feed)
+                if self.decoding=="beamsearch":
+                    batch_predicted_indices = self.beamsearch_decoding(H, self.beamsize)
+                if self.decoding=="viterbi":
+                    batch_predicted_indices = self.beamsearch_decoding(H, self.tag_size)
+
                 results.append(batch_predicted_indices[0])
 
         if len(losses)==0:
