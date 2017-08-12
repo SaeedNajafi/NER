@@ -67,8 +67,11 @@ class NER(object):
             if self.decoding=="greedy":
                 self.greedy_decoding(H)
 
-            if self.decoding=="beamsearch" or self.decoding=="viterbi":
-                self.H = H
+            elif self.decoding=="beamsearch":
+                self.beamsearch_decoding(H, self.beamsize)
+
+            elif self.decoding=="viterbi":
+                self.beamsearch_decoding(H, self.tag_size)
 
         self.train_op = self.add_training_op(loss)
 
@@ -676,7 +679,7 @@ class NER(object):
                         (-1, self.max_sentence_length, self.tag_size)
                         )
 
-        self.predictions = tf.nn.softmax(self.preds)
+
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=self.preds,
                                     targets=self.tag_placeholder,
@@ -685,6 +688,7 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
+        self.predictions = tf.nn.softmax(self.preds)
         return self.loss
 
     def train_by_crf(self, H):
@@ -899,13 +903,10 @@ class NER(object):
         with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable("tag_lookup_table")
 
-        beam = []
-        candidates= []
         GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
-        preds = []
-        outputs = []
+
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
@@ -914,22 +915,21 @@ class NER(object):
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                     predictions = tf.nn.softmax(pred)
                     probs, indices = tf.nn.top_k(predictions, k=beamsize, sorted=True)
-                    probs_t = tf.transpose(probs, [1,0])
-                    indices_t = tf.transpose(indices, [1,0])
-                    for i in range(beamsize):
-                        new_indices = []
-                        new_indices.append(indices_t[i])
-                        new_score = tf.add(0.0, tf.log(probs_t[i]))
-                        new_state = state
-                        new_beam = []
-                        new_beam.append(new_indices)
-                        new_beam.append(new_score)
-                        new_beam.append(new_state)
-                        beam.append(new_beam)
+
+                    prev_indices = indices
+                    beam = tf.expand_dims(indices, axis=2)
+                    prev_probs = tf.log(probs)
+                    prev_states = [state for i in range(beamsize)]
+                    prev_states = tf.stack(prev_states, axis=1)
+
                 else:
+                    prev_indices_t = tf.transpose(prev_indices, [1,0])
+                    prev_probs_t = tf.transpose(prev_probs, [1,0])
+                    prev_states_t = tf.transpose(prev_states, [1,0,2])
+                    beam_t = tf.transpose(beam, [1,0,2])
                     for b in range(beamsize):
-                        prev_output = tf.nn.embedding_lookup(tag_lookup_table, beam[b][0][-1])
-                        output, state = self.decoder_lstm_cell(prev_output, beam[b][2], scope)
+                        prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
+                        output, state = self.decoder_lstm_cell(prev_output, prev_states_t[b], scope)
 
                         H_and_output = tf.concat([H_t[time_index], output], axis=1)
                         pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
@@ -937,54 +937,38 @@ class NER(object):
                         probs, indices = tf.nn.top_k(predictions, k=beamsize, sorted=True)
                         probs_t = tf.transpose(probs, [1,0])
                         indices_t = tf.transpose(indices, [1,0])
-                        for i in range(beamsize):
-                            new_indices = beam[b][0]
-                            new_indices.append(indices_t[i])
-                            new_score = tf.add(beam[b][1], tf.log(probs_t[i]))
-                            new_state = state
-                            new_beam = []
-                            new_beam.append(new_indices)
-                            new_beam.append(new_score)
-                            new_beam.append(new_state)
-                            candidates.append(new_beam)
-                    temp = []
-                    for i in range(beamsize):
-                        for j in range(beamsize):
-                            temp.append(candidates[i*beamsize + j][1])
+                        for bb in range(beamsize):
+                            probs_candidates[b*beamsize + bb] = tf.add(prev_probs_t[b] + tf.log(probs_t[bb]))
+                            indices_candidates[b*beamsize + bb] = indices_t[bb]
+                            beam_candidates[b*beamsize + bb] = tf.concat([beam_t[b], indices_t[bb]], axis=1)
+                            state_candidates[b*beamsize + bb] = state
 
-                    temp = tf.stack(temp, axis=1)
-                    _, max_indices = tf.nn.top_k(temp, k=beamsize, sorted=True)
+                    temp_probs = tf.stack(probs_candidates, axis=1)
+                    temp_indices = tf.stack(indices_candidates, axis=1)
+                    temp_beam = tf.stack(beam_candidates, axis=1)
+                    temp_states = tf.stack(state_candidates, axis=1)
+                    _, max_indices = tf.nn.top_k(temp_probs, k=beamsize, sorted=True)
 
-                    del beam[:]
-                    beam = []
-                    np_max_indices = max_indices.eval()
-                    indices = []
-                    scores = []
-                    states = []
-                    for i in range(beamsize):
-                        indices = []
-                        scores = []
-                        states = []
-                        for j in range(b_size):
-                            indices[j] = tf.stack([t[j] for t in candidates[np_max_indices[i][j]][0]], axis=0)
-                            scores[j] = candidates[np_max_indices[i][j]][1][j]
-                            states[j] = candidates[np_max_indices[i][j]][2][j]
+                    #batch index
+                    b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
 
-                        indices = tf.split(tf.stack(indices, axis=0), axis=1)
-                        scores = tf.stack(scores, axis=0)
-                        states = tf.stack(states, axis=0)
-                        new_beam = []
-                        new_beam.append(indices)
-                        new_beam.append(scores)
-                        new_beam.append(states)
-                        beam.append(new_beam)
+                    #beam index
+                    be_index = tf.constant(beamsize*beamsize, (1, beamsize))
 
-                    del candidates[:]
-                    candidates = []
+                    #index
+                    index = tf.add(
+                                tf.matmul(b_index, be_index),
+                                max_indices
+                                )
+                    prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
+                    prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
+                    beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
+                    prev_states = tf.gather(tf.reshape(temp_states, [-1, self.tag_size]), index)
 
-            outputs = tf.stack(beam[0][0], axis=1)
+            beam_t = tf.transpose(beam, [1,0,2])
+            self.outputs = beam_t[0]
 
-        return outputs
+        return
 
     def add_training_op(self, loss):
         """Sets up the training Ops.
@@ -1060,16 +1044,8 @@ class NER(object):
                         tag_batch=tag_data
                     )
 
-            if self.inference=="crf" or self.inference=="decoder_rnn":
-                loss, _ = session.run(
-                                [self.loss, self.train_op],
-                                feed_dict=feed
-                                )
-            else:
-                loss, _, _ = session.run(
-                                [self.loss, self.predictions, self.train_op],
-                                feed_dict=feed
-                                )
+
+            loss, _ = session.run([self.loss, self.train_op],feed_dict=feed)
 
             total_loss.append(loss)
 
@@ -1210,11 +1186,7 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                H = session.run([self.H], feed_dict=feed)
-                if self.decoding=="beamsearch":
-                    batch_predicted_indices = self.beamsearch_decoding(H, self.beamsize)
-                if self.decoding=="viterbi":
-                    batch_predicted_indices = self.beamsearch_decoding(H, self.tag_size)
+                batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
 
                 results.append(batch_predicted_indices[0])
 
