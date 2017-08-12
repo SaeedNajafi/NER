@@ -948,7 +948,7 @@ class NER(object):
                         for bb in range(beamsize):
                             probs_candidates.append(tf.add(prev_probs_t[b], tf.log(probs_t[bb])))
                             indices_candidates.append(indices_t[bb])
-                            beam_candidates.append(tf.concat([beam_t[b], indices_t[bb]], axis=1))
+                            beam_candidates.append(tf.concat([beam_t[b], tf.expand_dims(indices_t[bb], axis=1)], axis=1))
                             c_state_candidates.append(c_state)
                             m_state_candidates.append(m_state)
 
@@ -963,7 +963,7 @@ class NER(object):
                     b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
 
                     #beam index
-                    be_index = tf.constant(beamsize*beamsize, (1, beamsize))
+                    be_index = tf.constant(beamsize*beamsize, dtype=tf.int32, shape=(1, beamsize))
 
                     #index
                     index = tf.add(
