@@ -910,7 +910,7 @@ class NER(object):
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
-                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
+                    output, (c_state, m_state) = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
                     H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                     predictions = tf.nn.softmax(pred)
@@ -919,17 +919,21 @@ class NER(object):
                     prev_indices = indices
                     beam = tf.expand_dims(indices, axis=2)
                     prev_probs = tf.log(probs)
-                    prev_states = [state for i in range(beamsize)]
-                    prev_states = tf.stack(prev_states, axis=1)
+                    prev_c_states = [c_state for i in range(beamsize)]
+                    prev_c_states = tf.stack(prev_c_states, axis=1)
+                    prev_m_states = [m_state for i in range(beamsize)]
+                    prev_m_states = tf.stack(prev_m_states, axis=1)
 
                 else:
                     prev_indices_t = tf.transpose(prev_indices, [1,0])
                     prev_probs_t = tf.transpose(prev_probs, [1,0])
-                    prev_states_t = tf.transpose(prev_states, [1,0,2])
+                    prev_c_states_t = tf.transpose(prev_c_states, [1,0,2])
+                    prev_m_states_t = tf.transpose(prev_m_states, [1,0,2])
+
                     beam_t = tf.transpose(beam, [1,0,2])
                     for b in range(beamsize):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
-                        output, state = self.decoder_lstm_cell(prev_output, prev_states_t[b], scope)
+                        output, (c_state, m_state) = self.decoder_lstm_cell(prev_output, (prev_c_states_t[b],prev_m_states_t[b]), scope)
 
                         H_and_output = tf.concat([H_t[time_index], output], axis=1)
                         pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
@@ -941,12 +945,14 @@ class NER(object):
                             probs_candidates[b*beamsize + bb] = tf.add(prev_probs_t[b] + tf.log(probs_t[bb]))
                             indices_candidates[b*beamsize + bb] = indices_t[bb]
                             beam_candidates[b*beamsize + bb] = tf.concat([beam_t[b], indices_t[bb]], axis=1)
-                            state_candidates[b*beamsize + bb] = state
+                            c_state_candidates[b*beamsize + bb] = c_state
+                            m_state_candidates[b*beamsize + bb] = m_state
 
                     temp_probs = tf.stack(probs_candidates, axis=1)
                     temp_indices = tf.stack(indices_candidates, axis=1)
                     temp_beam = tf.stack(beam_candidates, axis=1)
-                    temp_states = tf.stack(state_candidates, axis=1)
+                    temp_c_states = tf.stack(c_state_candidates, axis=1)
+                    temp_m_states = tf.stack(m_state_candidates, axis=1)
                     _, max_indices = tf.nn.top_k(temp_probs, k=beamsize, sorted=True)
 
                     #batch index
@@ -963,7 +969,8 @@ class NER(object):
                     prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
                     prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
                     beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
-                    prev_states = tf.gather(tf.reshape(temp_states, [-1, self.tag_size]), index)
+                    prev_c_states = tf.gather(tf.reshape(temp_c_states, [-1, self.tag_size]), index)
+                    prev_m_states = tf.gather(tf.reshape(temp_m_states, [-1, self.tag_size]), index)
 
             beam_t = tf.transpose(beam, [1,0,2])
             self.outputs = beam_t[0]
