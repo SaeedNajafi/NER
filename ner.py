@@ -911,17 +911,16 @@ class NER(object):
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
                     output, state = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
+
                     H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                     predictions = tf.nn.softmax(pred)
                     probs, indices = tf.nn.top_k(predictions, k=beamsize, sorted=True)
-
                     prev_indices = indices
                     beam = tf.expand_dims(indices, axis=2)
                     prev_probs = tf.log(probs)
                     prev_states = [state for i in range(beamsize)]
                     prev_states = tf.stack(prev_states, axis=1)
-
                 else:
                     prev_indices_t = tf.transpose(prev_indices, [1,0])
                     prev_probs_t = tf.transpose(prev_probs, [1,0])
