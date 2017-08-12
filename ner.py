@@ -930,6 +930,11 @@ class NER(object):
                     prev_m_states_t = tf.transpose(prev_m_states, [1,0,2])
 
                     beam_t = tf.transpose(beam, [1,0,2])
+		    probs_candidates = []
+		    indices_candidates = []
+		    beam_candidates = []
+		    c_state_candidates = []
+		    m_state_candidates = []
                     for b in range(beamsize):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
                         output, (c_state, m_state) = self.decoder_lstm_cell(prev_output, (prev_c_states_t[b],prev_m_states_t[b]), scope)
@@ -941,11 +946,11 @@ class NER(object):
                         probs_t = tf.transpose(probs, [1,0])
                         indices_t = tf.transpose(indices, [1,0])
                         for bb in range(beamsize):
-                            probs_candidates[b*beamsize + bb] = tf.add(prev_probs_t[b] + tf.log(probs_t[bb]))
-                            indices_candidates[b*beamsize + bb] = indices_t[bb]
-                            beam_candidates[b*beamsize + bb] = tf.concat([beam_t[b], indices_t[bb]], axis=1)
-                            c_state_candidates[b*beamsize + bb] = c_state
-                            m_state_candidates[b*beamsize + bb] = m_state
+                            probs_candidates.append(tf.add(prev_probs_t[b], tf.log(probs_t[bb])))
+                            indices_candidates.append(indices_t[bb])
+                            beam_candidates.append(tf.concat([beam_t[b], indices_t[bb]], axis=1))
+                            c_state_candidates.append(c_state)
+                            m_state_candidates.append(m_state)
 
                     temp_probs = tf.stack(probs_candidates, axis=1)
                     temp_indices = tf.stack(indices_candidates, axis=1)
