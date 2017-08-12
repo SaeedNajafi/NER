@@ -34,9 +34,9 @@ class NER(object):
     inference = "decoder_rnn"
 
     """for decoder_rnn"""
-    decoding="greedy"
-    #decoding="beamsearch"
-    #beamsize=4
+    #decoding="greedy"
+    decoding="beamsearch"
+    beamsize=4
     #decoding="viterbi"
 
 
@@ -966,8 +966,7 @@ class NER(object):
                     del candidates[:]
                     candidates = []
 
-            self.outputs = tf.stack(outputs, axis=1)
-            preds = tf.stack(preds, axis=1)
+            self.outputs = tf.stack(beam[0][0], axis=1)
 
         return
 
