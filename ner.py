@@ -918,11 +918,6 @@ class NER(object):
                                 shape=(1, beamsize)
                                 )
 
-        #index
-        index = tf.add(
-                    tf.matmul(b_index, be_index),
-                    max_indices
-                    )
 
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
@@ -985,7 +980,11 @@ class NER(object):
                     temp_m_states = tf.stack(m_state_candidates, axis=1)
                     _, max_indices = tf.nn.top_k(temp_probs, k=beamsize, sorted=True)
 
-
+                    #index
+                    index = tf.add(
+                                tf.matmul(b_index, be_index),
+                                max_indices
+                                )
                     prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
                     prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
                     beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
