@@ -907,6 +907,23 @@ class NER(object):
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
 
+        """ we will need index to select top ranked beamsize stuff"""
+        #batch index
+        b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
+
+        #beam index
+        be_index = tf.constant(
+                                beamsize*beamsize,
+                                dtype=tf.int32,
+                                shape=(1, beamsize)
+                                )
+
+        #index
+        index = tf.add(
+                    tf.matmul(b_index, be_index),
+                    max_indices
+                    )
+
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
@@ -968,21 +985,7 @@ class NER(object):
                     temp_m_states = tf.stack(m_state_candidates, axis=1)
                     _, max_indices = tf.nn.top_k(temp_probs, k=beamsize, sorted=True)
 
-                    #batch index
-                    b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
 
-                    #beam index
-                    be_index = tf.constant(
-                                            beamsize*beamsize,
-                                            dtype=tf.int32,
-                                            shape=(1, beamsize)
-                                            )
-
-                    #index
-                    index = tf.add(
-                                tf.matmul(b_index, be_index),
-                                max_indices
-                                )
                     prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
                     prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
                     beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
