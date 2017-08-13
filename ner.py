@@ -928,16 +928,20 @@ class NER(object):
                     prev_probs_t = tf.transpose(prev_probs, [1,0])
                     prev_c_states_t = tf.transpose(prev_c_states, [1,0,2])
                     prev_m_states_t = tf.transpose(prev_m_states, [1,0,2])
-
                     beam_t = tf.transpose(beam, [1,0,2])
-		    probs_candidates = []
-		    indices_candidates = []
-		    beam_candidates = []
-		    c_state_candidates = []
-		    m_state_candidates = []
+
+                    probs_candidates = []
+                    indices_candidates = []
+                    beam_candidates = []
+                    c_state_candidates = []
+                    m_state_candidates = []
                     for b in range(beamsize):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
-                        output, (c_state, m_state) = self.decoder_lstm_cell(prev_output, (prev_c_states_t[b],prev_m_states_t[b]), scope)
+                        output, (c_state, m_state) = self.decoder_lstm_cell(
+                                                        prev_output,
+                                                        (prev_c_states_t[b],prev_m_states_t[b]),
+                                                        scope
+                                                        )
 
                         H_and_output = tf.concat([H_t[time_index], output], axis=1)
                         pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
@@ -948,7 +952,12 @@ class NER(object):
                         for bb in range(beamsize):
                             probs_candidates.append(tf.add(prev_probs_t[b], tf.log(probs_t[bb])))
                             indices_candidates.append(indices_t[bb])
-                            beam_candidates.append(tf.concat([beam_t[b], tf.expand_dims(indices_t[bb], axis=1)], axis=1))
+                            beam_candidates.append(tf.concat(
+                                                        [beam_t[b],
+                                                         tf.expand_dims(indices_t[bb], axis=1)
+                                                         ], axis=1
+                                                         )
+                                                    )
                             c_state_candidates.append(c_state)
                             m_state_candidates.append(m_state)
 
@@ -963,7 +972,11 @@ class NER(object):
                     b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
 
                     #beam index
-                    be_index = tf.constant(beamsize*beamsize, dtype=tf.int32, shape=(1, beamsize))
+                    be_index = tf.constant(
+                                            beamsize*beamsize,
+                                            dtype=tf.int32,
+                                            shape=(1, beamsize)
+                                            )
 
                     #index
                     index = tf.add(
@@ -973,8 +986,20 @@ class NER(object):
                     prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
                     prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
                     beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
-                    prev_c_states = tf.gather(tf.reshape(temp_c_states, [-1, self.tag_size]), index)
-                    prev_m_states = tf.gather(tf.reshape(temp_m_states, [-1, self.tag_size]), index)
+                    prev_c_states = tf.gather(
+                                            tf.reshape(
+                                                temp_c_states,
+                                                [-1, self.tag_size]
+                                            ),
+                                            index
+                                        )
+                    prev_m_states = tf.gather(
+                                            tf.reshape(
+                                                temp_m_states,
+                                                [-1, self.tag_size]
+                                            ),
+                                            index
+                                        )
 
             beam_t = tf.transpose(beam, [1,0,2])
             self.outputs = beam_t[0]
