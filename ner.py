@@ -872,10 +872,10 @@ class NER(object):
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
-                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
+                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
                 else:
                     prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
-                    output, state = self.decoder_lstm_cell(prev_output, state, scope)
+                    output, state = self.decoder_lstm_cell(prev_output, state)
 
 
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)
@@ -923,7 +923,7 @@ class NER(object):
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
-                    output, (c_state, m_state) = self.decoder_lstm_cell(GO_symbol, initial_state, scope)
+                    output, (c_state, m_state) = self.decoder_lstm_cell(GO_symbol, initial_state)
                     H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                     predictions = tf.nn.softmax(pred)
@@ -952,8 +952,7 @@ class NER(object):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
                         output, (c_state, m_state) = self.decoder_lstm_cell(
                                                         prev_output,
-                                                        (prev_c_states_t[b],prev_m_states_t[b]),
-                                                        scope
+                                                        (prev_c_states_t[b],prev_m_states_t[b])
                                                         )
 
                         H_and_output = tf.concat([H_t[time_index], output], axis=1)
