@@ -778,7 +778,7 @@ class NER(object):
         tag_embeddings_final = temp
         with tf.variable_scope('decoder_rnn') as scope:
             self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
-                                        num_units=self.tag_size,
+                                        num_units=2 * self.tag_size,
                                         use_peepholes=False,
                                         cell_clip=None,
                                         initializer=self.xavier_initializer,
@@ -810,7 +810,7 @@ class NER(object):
         with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
-                            (self.word_rnn_hidden_units + self.tag_size, self.tag_size),
+                            (self.word_rnn_hidden_units + 2 * self.tag_size, self.tag_size),
                             tf.float32,
                             self.xavier_initializer
                             )
@@ -826,7 +826,7 @@ class NER(object):
                         tf.matmul(
                             tf.reshape(
                                 H_and_tag_scores,
-                                (-1, self.word_rnn_hidden_units + self.tag_size)
+                                (-1, self.word_rnn_hidden_units + 2 * self.tag_size)
                             ),
                             U_softmax
                         ),
@@ -903,8 +903,7 @@ class NER(object):
         with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable("tag_lookup_table")
 
-        GO_symbol = tf.
-        zeros((b_size, self.tag_size), dtype=tf.float32)
+        GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
 
@@ -991,14 +990,14 @@ class NER(object):
                     prev_c_states = tf.gather(
                                             tf.reshape(
                                                 temp_c_states,
-                                                [-1, self.tag_size]
+                                                [-1, 2 * self.tag_size]
                                             ),
                                             index
                                         )
                     prev_m_states = tf.gather(
                                             tf.reshape(
                                                 temp_m_states,
-                                                [-1, self.tag_size]
+                                                [-1, 2 * self.tag_size]
                                             ),
                                             index
                                         )
