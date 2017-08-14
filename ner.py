@@ -903,7 +903,8 @@ class NER(object):
         with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable("tag_lookup_table")
 
-        GO_symbol = tf.zeros((b_size, self.tag_size), dtype=tf.float32)
+        GO_symbol = tf.
+        zeros((b_size, self.tag_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
 
