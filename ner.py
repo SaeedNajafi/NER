@@ -21,7 +21,7 @@ class NER(object):
     max_word_length = 25
     tag_size = 17
 
-    batch_size = 16
+    batch_size = 10
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
