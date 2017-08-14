@@ -29,14 +29,14 @@ class NER(object):
     early_stopping = 2
 
     """inference type"""
-    #inference = "softmax"
+    inference = "softmax"
     #inference = "crf"
-    inference = "decoder_rnn"
+    #inference = "decoder_rnn"
 
     """for decoder_rnn"""
     #decoding="greedy"
-    decoding="beamsearch"
-    beamsize=4
+    #decoding="beamsearch"
+    #beamsize=12
     #decoding="viterbi"
 
 
