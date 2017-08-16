@@ -29,14 +29,14 @@ class NER(object):
     early_stopping = 2
 
     """inference type"""
-    inference = "softmax"
+    #inference = "softmax"
     #inference = "crf"
-    #inference = "decoder_rnn"
+    inference = "decoder_rnn"
 
     """for decoder_rnn"""
-    #decoding="greedy"
+    decoding="greedy"
     #decoding="beamsearch"
-    #beamsize=4
+    #beamsize=2
     #decoding="viterbi"
 
 
@@ -869,6 +869,7 @@ class NER(object):
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
         outputs = []
+	preds = []
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
@@ -879,13 +880,22 @@ class NER(object):
 
 
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)
-
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+		preds.append(pred)
                 predictions = tf.nn.softmax(pred)
                 predicted_indices = tf.argmax(predictions, axis=1)
                 outputs.append(predicted_indices)
 
             self.outputs = tf.stack(outputs, axis=1)
+	    preds = tf.stack(preds, axis=1)
+
+	self.greedy_loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
 
         return
 
@@ -1223,9 +1233,10 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
+                batch_predicted_indices, loss = session.run([self.outputs, self.greedy_loss], feed_dict=feed)
 
                 results.append(batch_predicted_indices[0])
+		losses.append(loss)
 
         if len(losses)==0:
             return 0, results
