@@ -37,7 +37,6 @@ class NER(object):
     decoding="greedy"
     #decoding="beamsearch"
     #beamsize=2
-    #decoding="viterbi"
 
 
     """path to different files"""
@@ -69,9 +68,6 @@ class NER(object):
 
             elif self.decoding=="beamsearch":
                 self.beamsearch_decoding(H, self.beamsize)
-
-            elif self.decoding=="viterbi":
-                self.beamsearch_decoding(H, self.tag_size)
 
         self.train_op = self.add_training_op(loss)
 
