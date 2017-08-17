@@ -366,10 +366,6 @@ class NER(object):
 
         return out
 
-    def diag_initializer(self, shape, **kargs):
-        out = tf.diag(tf.ones((self.tag_size,),dtype=tf.float32))
-        return out
-
     def encoder(self, char_embeddings, word_embeddings, cap_embeddings):
 
         #current batch_size
@@ -751,7 +747,7 @@ class NER(object):
                                     shape = (self.tag_size, self.tag_size),
                                     dtype= tf.float32,
                                     trainable= True,
-                                    initializer = self.diag_initializer
+                                    initializer = self.xavier_initializer
                                     )
 
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
@@ -865,7 +861,7 @@ class NER(object):
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
         outputs = []
-	preds = []
+
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(self.max_sentence_length):
                 if time_index==0:
@@ -877,21 +873,11 @@ class NER(object):
 
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-		preds.append(pred)
                 predictions = tf.nn.softmax(pred)
                 predicted_indices = tf.argmax(predictions, axis=1)
                 outputs.append(predicted_indices)
 
             self.outputs = tf.stack(outputs, axis=1)
-	    preds = tf.stack(preds, axis=1)
-
-	self.greedy_loss = tf.contrib.seq2seq.sequence_loss(
-                                    logits=preds,
-                                    targets=self.tag_placeholder,
-                                    weights=self.word_mask_placeholder,
-                                    average_across_timesteps=True,
-                                    average_across_batch=True
-                                    )
 
         return
 
@@ -1229,17 +1215,16 @@ class NER(object):
                 if np.any(tag_data):
                     feed[self.tag_placeholder] = tag_data
 
-                batch_predicted_indices, loss = session.run([self.outputs, self.greedy_loss], feed_dict=feed)
+                batch_predicted_indices = session.run([self.outputs], feed_dict=feed)
 
                 results.append(batch_predicted_indices[0])
-		losses.append(loss)
 
         if len(losses)==0:
             return 0, results
 
         else:
             return np.mean(losses), results
-
+            
     def save_predictions(
                 self,
                 predictions,
@@ -1353,7 +1338,7 @@ def run_NER():
             print
             print 'Dev'
             start = time.time()
-            dev_loss, predictions = model.predict(
+            _, predictions = model.predict(
                                                 session,
                                                 model.char_X_dev,
                                                 model.word_length_X_dev,
@@ -1364,7 +1349,6 @@ def run_NER():
                                                 model.Y_dev
                                                 )
 
-            print 'Dev loss: {}'.format(dev_loss)
             print 'Total prediction time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to dev.predicted'
             model.save_predictions(
@@ -1379,7 +1363,7 @@ def run_NER():
             print
             print 'Test'
             start = time.time()
-            test_loss, predictions = model.predict(
+            _, predictions = model.predict(
                                                 session,
                                                 model.char_X_test,
                                                 model.word_length_X_test,
@@ -1390,7 +1374,71 @@ def run_NER():
                                                 model.Y_test
                                                 )
 
-            print 'Test loss: {}'.format(test_loss)
+            print 'Total prediction time: {} seconds'.format(time.time() - start)
+            print 'Writing predictions to test.predicted'
+            model.save_predictions(
+                                predictions,
+                                model.sentence_length_X_test,
+                                "test.predicted",
+                                model.word_X_test,
+                                model.Y_test
+                                )
+
+def test_NER():
+    """test NER model.
+       For beam search testing, don't forget to enable its
+       paramters at the top.
+    """
+
+    with tf.Graph().as_default():
+        model = NER()
+
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+
+        with tf.Session() as session:
+            session.run(init)
+            saver.restore(session, './weights/ner.weights')
+            print
+            print
+            print 'Dev'
+            start = time.time()
+            _, predictions = model.predict(
+                                                session,
+                                                model.char_X_dev,
+                                                model.word_length_X_dev,
+                                                model.cap_X_dev,
+                                                model.word_X_dev,
+                                                model.mask_X_dev,
+                                                model.sentence_length_X_dev,
+                                                model.Y_dev
+                                                )
+
+            print 'Total prediction time: {} seconds'.format(time.time() - start)
+            print 'Writing predictions to dev.predicted'
+            model.save_predictions(
+                                predictions,
+                                model.sentence_length_X_dev,
+                                "dev.predicted",
+                                model.word_X_dev,
+                                model.Y_dev
+                                )
+
+            print
+            print
+            print 'Test'
+            start = time.time()
+            _, predictions = model.predict(
+                                                session,
+                                                model.char_X_test,
+                                                model.word_length_X_test,
+                                                model.cap_X_test,
+                                                model.word_X_test,
+                                                model.mask_X_test,
+                                                model.sentence_length_X_test,
+                                                model.Y_test
+                                                )
+
             print 'Total prediction time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to test.predicted'
             model.save_predictions(
@@ -1403,3 +1451,4 @@ def run_NER():
 
 if __name__ == "__main__":
   run_NER()
+  test_NER()
