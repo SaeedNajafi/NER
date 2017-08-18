@@ -81,7 +81,7 @@ def run_epoch(
     return np.mean(total_loss)
 
 def predict(
-	config,
+        config,
         model,
         session,
         char_X,
@@ -281,7 +281,7 @@ def run_NER():
                                     )
 
             _ , predictions = predict(
-				    config,
+                                    config,
                                     model,
                                     session,
                                     data['dev_data']['char_X'],
@@ -333,7 +333,7 @@ def run_NER():
         print 'Dev'
         start = time.time()
         _ , predictions = predict(
-				config,
+                                config,
                                 model,
                                 session,
                                 data['dev_data']['char_X'],
@@ -362,7 +362,7 @@ def run_NER():
         print 'Test'
         start = time.time()
         _ , predictions = predict(
-				config,
+                                config,
                                 model,
                                 session,
                                 data['test_data']['char_X'],
@@ -401,7 +401,7 @@ def test_NER():
 
     with tf.Session() as session:
         session.run(init)
-	saver.restore(session, './weights/ner.weights')
+        saver.restore(session, './weights/ner.weights')
         print
         print
         print 'Dev'
@@ -431,8 +431,7 @@ def test_NER():
                         data['num_to_tag'],
                         data['num_to_word']
                         )
-
-	print
+        print
         print
         print 'Test'
         start = time.time()
