@@ -1,11 +1,7 @@
-from collections import defaultdict
-import sys, os, re, json
+import re
 import itertools
-from collections import Counter
-import time
 from numpy import *
 import numpy as np
-import pandas as pd
 
 def load_embeddings(vocabfile, vectorfile=None):
     em = None
