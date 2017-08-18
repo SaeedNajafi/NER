@@ -31,7 +31,6 @@ class Configuration(object):
     #decoding="beamsearch"
     #beamsize=2
 
-
     """path to different files"""
     word_dic_path = './data/glove_en_word_100_dic.txt'
     word_vectors_path = './data/glove_en_word_100_vectors.txt'

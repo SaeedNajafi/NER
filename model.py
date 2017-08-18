@@ -3,7 +3,7 @@ import numpy as np
 
 class NER(object):
     """ Implements an NER (Named Entity Recognition) model """
-
+    
     def __init__(self, config, word_vectors, char_vectors):
         """Constructs the network using the helper functions defined below."""
 

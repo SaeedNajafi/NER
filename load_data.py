@@ -7,6 +7,7 @@ def load_data(config):
     Loads starter word vectors, creates random character vectors,
     and loads train/dev/test data.
     """
+
     
     #Loads the starter word vectors
     print "INFO: Reading word embeddings!"

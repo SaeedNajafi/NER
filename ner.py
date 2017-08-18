@@ -11,7 +11,6 @@ import numpy as np
 import tensorflow as tf
 import utils as ut
 
-
 def run_epoch(
             config,
             model,

@@ -3,6 +3,7 @@ import itertools
 from numpy import *
 import numpy as np
 
+
 def load_embeddings(vocabfile, vectorfile=None):
     em = None
     if(vectorfile is not None):
