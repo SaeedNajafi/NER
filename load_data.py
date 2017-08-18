@@ -34,7 +34,6 @@ def load_data(config):
 
     for (new_word, count) in sorted(temp_dic.items(), key=lambda item:item[1]):
         if count>2:
-	    print new_word
             new_words.append(new_word)
 
     words = words + new_words
