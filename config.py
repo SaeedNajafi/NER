@@ -22,8 +22,8 @@ class Configuration(object):
     early_stopping = 2
 
     """inference type"""
-    inference = "softmax"
-    #inference = "crf"
+    #inference = "softmax"
+    inference = "crf"
     #inference = "decoder_rnn"
 
     """for decoder_rnn"""
