@@ -8,7 +8,6 @@ def load_data(config):
     and loads train/dev/test data.
     """
 
-    
     #Loads the starter word vectors
     print "INFO: Reading word embeddings!"
     word_vectors, words = ut.load_embeddings(
@@ -34,7 +33,8 @@ def load_data(config):
                             temp_dic[word] = 1
 
     for (new_word, count) in sorted(temp_dic.items(), key=lambda item:item[1]):
-        if count>1:
+        if count>2:
+	    print new_word
             new_words.append(new_word)
 
     words = words + new_words

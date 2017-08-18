@@ -3,7 +3,7 @@ import numpy as np
 
 class NER(object):
     """ Implements an NER (Named Entity Recognition) model """
-    
+
     def __init__(self, config, word_vectors, char_vectors):
         """Constructs the network using the helper functions defined below."""
 
@@ -16,19 +16,19 @@ class NER(object):
 
         H = self.encoder(char_embed, word_embed, cap_embed, config)
 
-        if self.inference=="softmax":
+        if config.inference=="softmax":
             loss = self.train_by_softmax(H, config)
 
-        elif self.inference=="crf":
+        elif config.inference=="crf":
             loss = self.train_by_crf(H, config)
 
-        elif self.inference=="decoder_rnn":
+        elif config.inference=="decoder_rnn":
             loss = self.train_by_decoder_rnn(H, config)
 
-            if self.decoding=="greedy":
+            if config.decoding=="greedy":
                 self.greedy_decoding(H, config)
 
-            elif self.decoding=="beamsearch":
+            elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
         self.train_op = self.add_training_op(loss, config)
@@ -138,7 +138,7 @@ class NER(object):
                                 self.cap_input_placeholder
                                 )
 
-        with tf.variable_scope("word_embeddings", reuse=True):
+        with tf.variable_scope("word_embeddings"):
             word_lookup_table = tf.Variable(
                                	    word_vectors,
                                     name="word_lookup_table",
@@ -150,7 +150,7 @@ class NER(object):
                                 self.word_input_placeholder
                                 )
 
-        with tf.variable_scope("char_embeddings", reuse=True):
+        with tf.variable_scope("char_embeddings"):
             character_lookup_table = tf.Variable(
                                         char_vectors,
                                         name="character_lookup_table",
@@ -201,7 +201,7 @@ class NER(object):
         char_embeddings_t = tf.reshape(char_embeddings,
                             [-1, config.max_word_length, config.char_embedding_size])
 
-        with tf.variable_scope('char_rnn', reuse=True) as scope:
+        with tf.variable_scope('char_rnn') as scope:
 
             #character-level forward lstm cell
             forward_char_level_lstm = tf.contrib.rnn.LSTMCell(
@@ -319,7 +319,7 @@ class NER(object):
 
 
         ##################################     word-level encoder    ##################################
-        with tf.variable_scope('word_rnn', reuse=True) as scope:
+        with tf.variable_scope('word_rnn') as scope:
 
             forward_word_level_lstm = tf.contrib.rnn.LSTMCell(
                                             num_units=config.word_rnn_hidden_units,
@@ -374,7 +374,7 @@ class NER(object):
         ##################################     End   ##################################
 
         """hidden layer"""
-        with tf.variable_scope("hidden", reuse=True):
+        with tf.variable_scope("hidden"):
             U_hidden = tf.get_variable(
                             "U_hidden",
                             (2 * config.word_rnn_hidden_units, config.word_rnn_hidden_units),
@@ -413,7 +413,7 @@ class NER(object):
         """
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
+        with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units, config.tag_size),
@@ -464,7 +464,7 @@ class NER(object):
         """
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
+        with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units, config.tag_size),
@@ -514,7 +514,7 @@ class NER(object):
         """
 
         #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer", reuse=True):
+        with tf.variable_scope("tag_embedding_layer"):
             tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
                                     shape = (config.tag_size, config.tag_embedding_size),
@@ -572,7 +572,7 @@ class NER(object):
         H_and_tag_scores = tf.concat([H,tag_scores_dropped], axis=2)
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
+        with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
@@ -582,7 +582,7 @@ class NER(object):
 
             b_softmax = tf.get_variable(
                             "b_softmax",
-                            (self.tag_size,),
+                            (config.tag_size,),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )

@@ -81,6 +81,7 @@ def run_epoch(
     return np.mean(total_loss)
 
 def predict(
+	config,
         model,
         session,
         char_X,
@@ -143,7 +144,7 @@ def predict(
                     tag_batch=tag_data
                 )
 
-        if model.inference=="crf":
+        if config.inference=="crf":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
                 loss, unary_scores, sequence_lengths, transition_params = session.run(
@@ -179,7 +180,7 @@ def predict(
 
             results.append(inner_results)
 
-        elif model.inference=="softmax":
+        elif config.inference=="softmax":
 
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
@@ -195,7 +196,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif model.inference=="decoder_rnn":
+        elif config.inference=="decoder_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -239,7 +240,7 @@ def save_predictions(
 
                 f.write("\n")
 
-def eval_fscore(self):
+def eval_fscore():
     os.system("%s < %s > %s" % ('./conlleval', 'temp.predicted', 'temp.score'))
     result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
     return float(result_lines[1].strip().split()[-1])
@@ -280,6 +281,7 @@ def run_NER():
                                     )
 
             _ , predictions = predict(
+				    config,
                                     model,
                                     session,
                                     data['dev_data']['char_X'],
@@ -331,6 +333,7 @@ def run_NER():
         print 'Dev'
         start = time.time()
         _ , predictions = predict(
+				config,
                                 model,
                                 session,
                                 data['dev_data']['char_X'],
@@ -359,6 +362,7 @@ def run_NER():
         print 'Test'
         start = time.time()
         _ , predictions = predict(
+				config,
                                 model,
                                 session,
                                 data['test_data']['char_X'],
@@ -388,6 +392,75 @@ def test_NER():
        For beam search testing, don't forget to enable its
        paramters at the top.
     """
+    config = Configuration()
+    data = load_data(config)
+    model = NER(config, data['word_vectors'], data['char_vectors'])
+
+    init = tf.global_variables_initializer()
+    saver = tf.train.Saver()
+
+    with tf.Session() as session:
+        session.run(init)
+	saver.restore(session, './weights/ner.weights')
+        print
+        print
+        print 'Dev'
+        start = time.time()
+        _ , predictions = predict(
+                                config,
+                                model,
+                                session,
+                                data['dev_data']['char_X'],
+                                data['dev_data']['word_length_X'],
+                                data['dev_data']['cap_X'],
+                                data['dev_data']['word_X'],
+                                data['dev_data']['mask_X'],
+                                data['dev_data']['sentence_length_X'],
+                                data['dev_data']['Y']
+                                )
+
+        print 'Total prediction time: {} seconds'.format(time.time() - start)
+        print 'Writing predictions to dev.predicted'
+        save_predictions(
+                        config,
+                        predictions,
+                        data['dev_data']['sentence_length_X'],
+                        "dev.predicted",
+                        data['dev_data']['word_X'],
+                        data['dev_data']['Y'],
+                        data['num_to_tag'],
+                        data['num_to_word']
+                        )
+
+	print
+        print
+        print 'Test'
+        start = time.time()
+        _ , predictions = predict(
+                                config,
+                                model,
+                                session,
+                                data['test_data']['char_X'],
+                                data['test_data']['word_length_X'],
+                                data['test_data']['cap_X'],
+                                data['test_data']['word_X'],
+                                data['test_data']['mask_X'],
+                                data['test_data']['sentence_length_X'],
+                                data['test_data']['Y']
+                                )
+
+        print 'Total prediction time: {} seconds'.format(time.time() - start)
+        print 'Writing predictions to test.predicted'
+        save_predictions(
+                        config,
+                        predictions,
+                        data['test_data']['sentence_length_X'],
+                        "test.predicted",
+                        data['test_data']['word_X'],
+                        data['test_data']['Y'],
+                        data['num_to_tag'],
+                        data['num_to_word']
+                        )
 
 
 if __name__ == "__main__":
