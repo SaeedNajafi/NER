@@ -94,7 +94,6 @@ def predict(
 
     """Make predictions from the provided model."""
 
-    # If Y is given, the loss is also calculated
     # We deactivate dropout by setting it to 1
     dp = 1.0
     losses = []
