@@ -266,10 +266,12 @@ def run_NER():
             print 'Epoch {}'.format(epoch)
             start = time.time()
             ###
-	    if(epoch==6 or epoch==12 or epoch==18):
-		optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                 "adam_optimizer")
-		session.run(tf.variables_initializer(optimizer_scope))
+
+            #manually reseting adam optimizer
+            if(epoch==6 or epoch==12 or epoch==18):
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
+            
             train_loss = run_epoch(
                                     config,
                                     model,
