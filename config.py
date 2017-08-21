@@ -11,8 +11,8 @@ class Configuration(object):
     max_word_length = 25
 
     tag_size = 17
-    decoder_rnn_hidden_units = 25
-    tag_embedding_size = 10
+    decoder_rnn_hidden_units = 34
+    tag_embedding_size = 17
 
     batch_size = 10
     dropout = 0.5
@@ -23,13 +23,13 @@ class Configuration(object):
 
     """inference type"""
     #inference = "softmax"
-    inference = "crf"
-    #inference = "decoder_rnn"
+    #inference = "crf"
+    inference = "decoder_rnn"
 
     """for decoder_rnn"""
     #decoding="greedy"
-    #decoding="beamsearch"
-    #beamsize=4
+    decoding="beamsearch"
+    beamsize=8
 
     """path to different files"""
     word_dic_path = './data/glove_en_word_100_dic.txt'
