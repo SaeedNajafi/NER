@@ -28,7 +28,7 @@ class Configuration(object):
     #inference = "decoder_rnn"
 
     """for decoder_rnn"""
-    #decoding="greedy"
+    decoding="greedy"
     #decoding="beamsearch"
     #beamsize=4
 

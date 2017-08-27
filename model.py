@@ -787,8 +787,8 @@ class NER(object):
         """
 
         #we use adam optimizer
-	with tf.variable_scope("adam_optimizer"):
-	        optimizer = tf.train.AdamOptimizer(config.learning_rate)
+        with tf.variable_scope("adam_optimizer"):
+            optimizer = tf.train.AdamOptimizer(config.learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(loss))
         clipped_gradients, global_norm = tf.clip_by_global_norm(gradients, config.max_gradient_norm)
         train_operation = optimizer.apply_gradients(zip(clipped_gradients, variables))
