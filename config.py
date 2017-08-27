@@ -18,18 +18,19 @@ class Configuration(object):
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
-    max_epochs = 24
+    max_epochs = 48
     early_stopping = 2
+    random_seed = 11
 
     """inference type"""
-    #inference = "softmax"
+    inference = "softmax"
     #inference = "crf"
-    inference = "decoder_rnn"
+    #inference = "decoder_rnn"
 
     """for decoder_rnn"""
     #decoding="greedy"
-    decoding="beamsearch"
-    beamsize=8
+    #decoding="beamsearch"
+    #beamsize=4
 
     """path to different files"""
     word_dic_path = './data/glove_en_word_100_dic.txt'

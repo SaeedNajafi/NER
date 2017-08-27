@@ -249,6 +249,7 @@ def run_NER():
     """run NER model implementation.
     """
     config = Configuration()
+    np.random.seed(config.random_seed)
     data = load_data(config)
     model = NER(config, data['word_vectors'], data['char_vectors'])
 
@@ -259,6 +260,8 @@ def run_NER():
         best_val_loss = float('inf')
         best_val_epoch = 0
 
+	tf.set_random_seed(config.random_seed)
+
         session.run(init)
         first_start = time.time()
 
@@ -267,7 +270,7 @@ def run_NER():
             print 'Epoch {}'.format(epoch)
             start = time.time()
             ###
-	    if(epoch==1 or epoch==6 or epoch==12 or epoch==20):
+	    if(epoch==6 or epoch==12 or epoch==18 or epoch==24 or epoch==30 or epoch==36 or epoch==42):
 		optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
                                  "adam_optimizer")
 		session.run(tf.variables_initializer(optimizer_scope))
@@ -397,6 +400,7 @@ def test_NER():
        paramters at the top.
     """
     config = Configuration()
+    np.random.seed(config.random_seed)
     data = load_data(config)
     model = NER(config, data['word_vectors'], data['char_vectors'])
 
@@ -404,10 +408,12 @@ def test_NER():
     saver = tf.train.Saver()
 
     with tf.Session() as session:
+
+	tf.set_random_seed(config.random_seed)
         session.run(init)
         saver.restore(session, './weights/ner.weights')
         print
-        print
+	print
         print 'Dev'
         start = time.time()
         _ , predictions = predict(
