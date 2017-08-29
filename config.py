@@ -12,6 +12,7 @@ class Configuration(object):
 
     tag_size = 17
     decoder_rnn_hidden_units = 34
+    score_rnn_hidden_units = 34
     tag_embedding_size = 17
 
     batch_size = 10
@@ -26,8 +27,9 @@ class Configuration(object):
     inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
+    #inference = "score_rnn"
 
-    """for decoder_rnn"""
+    """for decoder_rnn and score_rnn"""
     #decoding="greedy"
     #decoding="beamsearch"
     #beamsize=4

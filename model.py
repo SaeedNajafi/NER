@@ -31,6 +31,9 @@ class NER(object):
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
+        elif config.inference=="score_rnn":
+            loss = self.train_by_score_rnn(H, config)
+
         self.train_op = self.add_training_op(loss, config)
 
         return
@@ -614,6 +617,79 @@ class NER(object):
 
         return self.loss
 
+    def train_by_score_rnn(self, H, config):
+
+        """
+        Apply a score_rnn layer in the training step to get a score for each tag.
+        Defines the loss during training.
+        """
+
+
+        b_size = tf.shape(H)[0]
+        GO_scores = tf.zeros((b_size, config.tag_size), dtype=tf.float32)
+
+        """softmax prediction layer"""
+        with tf.variable_scope("softmax"):
+            U_softmax = tf.get_variable(
+                            "U_softmax",
+                            (config.word_rnn_hidden_units + config.score_rnn_hidden_units, config.tag_size),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            b_softmax = tf.get_variable(
+                            "b_softmax",
+                            (config.tag_size,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
+        with tf.variable_scope('score_rnn') as scope:
+            score_lstm_cell = tf.contrib.rnn.LSTMCell(
+                                        num_units=config.score_rnn_hidden_units,
+                                        use_peepholes=False,
+                                        cell_clip=None,
+                                        initializer=self.xavier_initializer,
+                                        num_proj=None,
+                                        proj_clip=None,
+                                        num_unit_shards=None,
+                                        num_proj_shards=None,
+                                        forget_bias=1.0,
+                                        state_is_tuple=True,
+                                        activation=tf.tanh
+                                        )
+
+            initial_state = score_lstm_cell.zero_state(b_size, tf.float32)
+            H_t = tf.transpose(H, [1,0,2])
+
+            probs = []
+            preds = []
+            for time_index in range(config.max_sentence_length):
+                if time_index==0:
+                    output, state = score_lstm_cell(GO_scores, initial_state)
+                else:
+                    output, state = score_lstm_cell(pred, state)
+
+                scores_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                H_and_scores = tf.concat([H_t[time_index], scores_dropped], axis=1)
+                pred = tf.add(tf.matmul(H_and_scores, U_softmax), b_softmax)
+                preds.append(pred)
+                predictions = tf.nn.softmax(pred)
+                probs.append(predictions)
+
+            preds = tf.stack(preds, axis=1)
+            self.probs = tf.stack(probs, axis=1)
+
+        self.loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
+
+        return self.loss
+
     def greedy_decoding(self, H, config):
 
         #batch size
@@ -651,6 +727,73 @@ class NER(object):
                 outputs.append(predicted_indices)
 
             self.outputs = tf.stack(outputs, axis=1)
+
+        return
+
+    def simple_beam_search(self, probs, config):
+        #batch size
+        b_size = tf.shape(probs)[0]
+
+        probs_t = tf.transpose(probs, [1,0,2])
+
+        """ we will need index to select top ranked beamsize stuff"""
+
+        #batch index
+        b_index = tf.reshape(tf.range(0, b_size), (b_size, 1))
+
+        #beam index
+        be_index = tf.constant(
+                                config.beamsize * config.beamsize,
+                                dtype=tf.int32,
+                                shape=(1, config.beamsize)
+                                )
+
+        for time_index in range(config.max_sentence_length):
+            if time_index==0:
+                probabilities, indices = tf.nn.top_k(probs_t[time_index], k=config.beamsize, sorted=True)
+                prev_indices = indices
+                beam = tf.expand_dims(indices, axis=2)
+                prev_probs = tf.log(probabilities)
+            else:
+                prev_indices_t = tf.transpose(prev_indices, [1,0])
+                prev_probs_t = tf.transpose(prev_probs, [1,0])
+                beam_t = tf.transpose(beam, [1,0,2])
+
+                probs_candidates = []
+                indices_candidates = []
+                beam_candidates = []
+
+                probabilities, indices = tf.nn.top_k(probs_t[time_index], k=config.beamsize, sorted=True)
+                probabilities_t = tf.transpose(probabilities, [1,0])
+                indices_t = tf.transpose(indices, [1,0])
+                for b in range(config.beamsize):
+                    for bb in range(config.beamsize):
+                        probs_candidates.append(tf.add(prev_probs_t[b], tf.log(probabilities_t[bb])))
+                        indices_candidates.append(indices_t[bb])
+                        beam_candidates.append(tf.concat(
+                                                    [beam_t[b],
+                                                     tf.expand_dims(indices_t[bb], axis=1)
+                                                     ], axis=1
+                                                     )
+                                                )
+
+                temp_probs = tf.stack(probs_candidates, axis=1)
+                temp_indices = tf.stack(indices_candidates, axis=1)
+                temp_beam = tf.stack(beam_candidates, axis=1)
+                _, max_indices = tf.nn.top_k(temp_probs, k=config.beamsize, sorted=True)
+
+                #index
+                index = tf.add(
+                            tf.matmul(b_index, be_index),
+                            max_indices
+                            )
+
+                prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
+                prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
+                beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
+
+        beam_t = tf.transpose(beam, [1,0,2])
+        self.outputs = beam_t[0]
 
         return
 

@@ -195,6 +195,26 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
+        elif config.inference=="score_rnn":
+
+            if np.any(tag_data):
+                feed[model.tag_placeholder] = tag_data
+                loss, probs = session.run(
+                                        [model.loss, model.probs],
+                                        feed_dict=feed
+                                        )
+                losses.append(loss)
+            else:
+                probs = session.run(model.probs, feed_dict=feed)
+
+            if config.decoding=="greedy":
+                predicted_indices = probs.argmax(axis=2)
+                results.append(predicted_indices)
+
+            elif config.decoding=="beamsearch":
+                batch_predicted_indices= model.simple_beam_search(probs, config)
+                results.append(batch_predicted_indices[0])
+
         elif config.inference=="decoder_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
@@ -268,7 +288,7 @@ def run_NER():
             print 'Epoch {}'.format(epoch)
             start = time.time()
             ###
-            
+
             #manually reseting adam optimizer
             if(epoch==6 or epoch==12 or epoch==18):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
