@@ -643,9 +643,7 @@ class NER(object):
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
-
-        with tf.variable_scope('score_rnn') as scope:
-            score_lstm_cell = tf.contrib.rnn.LSTMCell(
+       	score_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.score_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
@@ -659,26 +657,28 @@ class NER(object):
                                         activation=tf.tanh
                                         )
 
-            initial_state = score_lstm_cell.zero_state(b_size, tf.float32)
-            H_t = tf.transpose(H, [1,0,2])
+        initial_state = score_lstm_cell.zero_state(b_size, tf.float32)
+        H_t = tf.transpose(H, [1,0,2])
 
-            probs = []
-            preds = []
-            for time_index in range(config.max_sentence_length):
-                if time_index==0:
-                    output, state = score_lstm_cell(GO_scores, initial_state)
-                else:
-                    output, state = score_lstm_cell(pred, state)
+        probs = []
+        preds = []
+	with tf.variable_scope("score_rnn", reuse=None) as scope:
+        	for time_index in range(config.max_sentence_length):
+        		if time_index==0:
+                    		output, state = score_lstm_cell(GO_scores, initial_state)
+                	else:
+				scope.reuse_variables()
+                    		output, state = score_lstm_cell(pred, state)
 
-                scores_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-                H_and_scores = tf.concat([H_t[time_index], scores_dropped], axis=1)
-                pred = tf.add(tf.matmul(H_and_scores, U_softmax), b_softmax)
-                preds.append(pred)
-                predictions = tf.nn.softmax(pred)
-                probs.append(predictions)
+                	scores_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+               		H_and_scores = tf.concat([H_t[time_index], scores_dropped], axis=1)
+                	pred = tf.add(tf.matmul(H_and_scores, U_softmax), b_softmax)
+                	preds.append(pred)
+                	predictions = tf.nn.softmax(pred)
+                	probs.append(predictions)
 
-            preds = tf.stack(preds, axis=1)
-            self.probs = tf.stack(probs, axis=1)
+        	preds = tf.stack(preds, axis=1)
+        	self.probs = tf.stack(probs, axis=1)
 
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=preds,
