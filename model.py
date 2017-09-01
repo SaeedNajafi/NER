@@ -624,6 +624,173 @@ class NER(object):
 
         return self.loss
 
+    def train_by_crf_rnn(self, H, config):
+
+        """
+        Apply a crf_rnn layer in the training step to get a score for each tag.
+        Defines the loss during training.
+        """
+
+        #we need to define a tag embedding layer.
+        with tf.variable_scope("tag_embedding_layer"):
+            tag_lookup_table = tf.get_variable(
+                                    name = "tag_lookup_table",
+                                    shape = (config.tag_size, config.tag_embedding_size),
+                                    dtype= tf.float32,
+                                    trainable= True,
+                                    initializer = self.xavier_initializer
+                                    )
+
+        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
+        b_size = tf.shape(tag_embeddings)[0]
+
+        #add GO symbol into the begining of every sentence and
+        #shift rest by one position.
+
+        temp = []
+        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
+        for time_index in range(config.max_sentence_length):
+            if time_index==0:
+                temp.append(GO_symbol)
+            else:
+                temp.append(tag_embeddings_t[time_index-1])
+
+        temp = tf.stack(temp, axis=1)
+
+        tag_embeddings_final = temp
+        with tf.variable_scope('decoder_rnn') as scope:
+            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+                                        num_units=config.decoder_rnn_hidden_units,
+                                        use_peepholes=False,
+                                        cell_clip=None,
+                                        initializer=self.xavier_initializer,
+                                        num_proj=None,
+                                        proj_clip=None,
+                                        num_unit_shards=None,
+                                        num_proj_shards=None,
+                                        forget_bias=1.0,
+                                        state_is_tuple=True,
+                                        activation=tf.tanh
+                                        )
+
+            tag_scores, _ = tf.nn.dynamic_rnn(
+                                    self.decoder_lstm_cell,
+                                    tag_embeddings_final,
+                                    sequence_length=self.sentence_length_placeholder,
+                                    initial_state=None,
+                                    dtype=tf.float32,
+                                    parallel_iterations=None,
+                                    swap_memory=False,
+                                    time_major=False,
+                                    scope=scope
+                                    )
+
+        tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
+        H_and_tag_scores = tf.concat([H,tag_scores_dropped], axis=2)
+
+        """softmax prediction layer"""
+        with tf.variable_scope("softmax"):
+            U_softmax = tf.get_variable(
+                            "U_softmax",
+                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            b_softmax = tf.get_variable(
+                            "b_softmax",
+                            (config.tag_size,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
+            preds = tf.add(
+                        tf.matmul(
+                            tf.reshape(
+                                H_and_tag_scores,
+                                (-1, config.word_rnn_hidden_units + config.decoder_rnn_hidden_units)
+                            ),
+                            U_softmax
+                        ),
+                        b_softmax
+                    )
+
+            preds = tf.reshape(
+                            preds,
+                            (-1, config.max_sentence_length, config.tag_size)
+                        )
+
+
+        rnn_loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
+
+        true_seqeunce_scores = tf.contrib.crf.crf_unary_score(
+                                    tag_indices=self.tag_placeholder,
+                                    sequence_lengths=self.sentence_length_placeholder,
+                                    inputs=preds
+                                    )
+
+        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
+        Z = self.simple_beam_search(tf.exp(preds), config)
+        log_likelihood = true_seqeunce_scores - tf.log(Z)
+        crf_loss = tf.reduce_mean(-log_likelihood)
+
+        self.loss = rnn_loss + crf_loss
+
+        return self.loss
+
+    def simple_beam_search(self, probs, config):
+        #batch size
+        b_size = tf.shape(probs)[0]
+
+        probs_t = tf.transpose(probs, [1,0,2])
+
+        """ we will need index to select top ranked beamsize stuff"""
+
+        #batch index
+        b_index = tf.reshape(tf.range(0, b_size), (b_size, 1))
+
+        #beam index
+        be_index = tf.constant(
+                                config.crf_beamsize * config.crf_beamsize,
+                                dtype=tf.int32,
+                                shape=(1, config.crf_beamsize)
+                                )
+
+        for time_index in range(config.max_sentence_length):
+            if time_index==0:
+                probabilities, indices = tf.nn.top_k(probs_t[time_index], k=config.crf_beamsize, sorted=True)
+                prev_probs = probabilities
+            else:
+
+                prev_probs_t = tf.transpose(prev_probs, [1,0])
+                probs_candidates = []
+                probabilities, indices = tf.nn.top_k(probs_t[time_index], k=config.crf_beamsize, sorted=True)
+                probabilities_t = tf.transpose(probabilities, [1,0])
+                for b in range(config.crf_beamsize):
+                    for bb in range(config.crf_beamsize):
+                        probs_candidates.append(tf.multiply(prev_probs_t[b], probabilities_t[bb]))
+
+                temp_probs = tf.stack(probs_candidates, axis=1)
+                _, max_indices = tf.nn.top_k(temp_probs, k=config.crf_beamsize, sorted=True)
+
+                #index
+                index = tf.add(
+                            tf.matmul(b_index, be_index),
+                            max_indices
+                            )
+
+
+                prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
+
+        return tf.reduce_sum(prev_probs, axis=1)
+
     def greedy_decoding(self, H, config):
 
         #batch size
