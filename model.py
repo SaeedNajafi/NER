@@ -749,45 +749,24 @@ class NER(object):
         #batch size
         b_size = tf.shape(probs)[0]
 
-        probs_t = tf.transpose(probs, [1,0,2])
+        beam_probs, _ = tf.nn.top_k(probs, k=config.crf_beamsize, sorted=True)
 
-        """ we will need index to select top ranked beamsize stuff"""
-
-        #batch index
-        b_index = tf.reshape(tf.range(0, b_size), (b_size, 1))
-
-        #beam index
-        be_index = tf.constant(
-                                config.crf_beamsize * config.crf_beamsize,
-                                dtype=tf.int32,
-                                shape=(1, config.crf_beamsize)
-                                )
-
+        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
+        
         for time_index in range(config.max_sentence_length):
             if time_index==0:
-                probabilities, indices = tf.nn.top_k(probs_t[time_index], k=config.crf_beamsize, sorted=True)
-                prev_probs = probabilities
+                prev_probs = beam_probs_t[time_index]
             else:
-
                 prev_probs_t = tf.transpose(prev_probs, [1,0])
                 probs_candidates = []
-                probabilities, indices = tf.nn.top_k(probs_t[time_index], k=config.crf_beamsize, sorted=True)
+                probabilities = beam_probs_t[time_index]
                 probabilities_t = tf.transpose(probabilities, [1,0])
                 for b in range(config.crf_beamsize):
                     for bb in range(config.crf_beamsize):
                         probs_candidates.append(tf.multiply(prev_probs_t[b], probabilities_t[bb]))
 
                 temp_probs = tf.stack(probs_candidates, axis=1)
-                _, max_indices = tf.nn.top_k(temp_probs, k=config.crf_beamsize, sorted=True)
-
-                #index
-                index = tf.add(
-                            tf.matmul(b_index, be_index),
-                            max_indices
-                            )
-
-
-                prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
+                prev_probs, _ = tf.nn.top_k(temp_probs, k=config.crf_beamsize, sorted=True)
 
         return tf.reduce_sum(prev_probs, axis=1)
 
