@@ -14,6 +14,7 @@ import utils as ut
 def run_epoch(
             config,
             model,
+            crf_turn,
             session,
             char_X,
             word_length_X,
@@ -57,6 +58,7 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
+                    loss_switch_batch=crf_turn,
                     tag_batch=tag_data
                 )
 
@@ -140,6 +142,7 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
+                    loss_switch_batch=0.0,
                     tag_batch=tag_data
                 )
 
@@ -266,17 +269,25 @@ def run_NER():
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
+
+            #for alternating between crf loss and rnn loss
+            if epoch%2==0:
+                crf_turn = 0.0
+            else:
+                crf_turn = 1.0
+
             start = time.time()
             ###
 
             #manually reseting adam optimizer
-            if(epoch==6 or epoch==12 or epoch==18):
+            if(epoch==6 or epoch==12 or epoch==18 or epoch=24 or epoch=30):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
             train_loss = run_epoch(
                                     config,
                                     model,
+                                    crf_turn,
                                     session,
                                     data['train_data']['char_X'],
                                     data['train_data']['word_length_X'],
