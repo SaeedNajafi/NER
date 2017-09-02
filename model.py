@@ -758,8 +758,8 @@ class NER(object):
                 prev_probs = beam_probs_t[time_index]
             else:
                 probabilities = beam_probs_t[time_index]
-                prev_probs = tf.exand_dims(prev_probs, axis=2)
-                probabilities = tf.exand_dims(probabilities, axis=1)
+                prev_probs = tf.expand_dims(prev_probs, axis=2)
+                probabilities = tf.expand_dims(probabilities, axis=1)
                 probs_candidates = tf.reshape(tf.multiply(prev_probs, probabilities), [-1, config.crf_beamsize * config.crf_beamsize])
                 prev_probs, _ = tf.nn.top_k(probs_candidates, k=config.crf_beamsize, sorted=True)
 
