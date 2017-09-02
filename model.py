@@ -738,10 +738,10 @@ class NER(object):
 
         preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
         Z = self.simple_beam_search(preds, config)
-        log_likelihood = true_seqeunce_scores - tf.log(Z+ 1e-10)
+        log_likelihood = true_seqeunce_scores - tf.log(Z)
         crf_loss = tf.reduce_mean(-log_likelihood)
 
-        self.loss = rnn_loss + crf_loss
+        self.loss = crf_loss
 
         return self.loss
 
