@@ -280,7 +280,7 @@ def run_NER():
             ###
 
             #manually reseting adam optimizer
-            if(epoch==6 or epoch==12 or epoch==18 or epoch=24 or epoch=30):
+            if(epoch==6 or epoch==12 or epoch==18 or epoch==24 or epoch==30):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
