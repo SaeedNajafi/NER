@@ -20,19 +20,19 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 48
     early_stopping = 2
-    random_seed = 101
+    random_seed = 11
 
     """inference type"""
-    inference = "softmax"
+    #inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
-    #inference = "crf_rnn"
+    inference = "crf_rnn"
 
     """for decoder_rnn and crf_rnn"""
-    #decoding="greedy"
+    decoding="greedy"
     #decoding="beamsearch"
     #beamsize=4
-    #crf_beamsize=tag_size
+    crf_beamsize=8
 
     """path to different files"""
     word_dic_path = './data/glove_en_word_100_dic.txt'

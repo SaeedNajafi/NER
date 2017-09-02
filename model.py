@@ -737,8 +737,8 @@ class NER(object):
                                     )
 
         preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
-        Z = self.simple_beam_search(tf.exp(preds), config)
-        log_likelihood = true_seqeunce_scores - tf.log(Z)
+        Z = self.simple_beam_search(preds, config)
+        log_likelihood = true_seqeunce_scores - tf.log(Z+ 1e-10)
         crf_loss = tf.reduce_mean(-log_likelihood)
 
         self.loss = rnn_loss + crf_loss
@@ -749,23 +749,20 @@ class NER(object):
         #batch size
         b_size = tf.shape(probs)[0]
 
-        beam_probs, _ = tf.nn.top_k(probs, k=config.crf_beamsize, sorted=True)
+        beam_probs, _ = tf.nn.top_k(tf.exp(probs), k=config.crf_beamsize, sorted=True)
 
         beam_probs_t = tf.transpose(beam_probs, [1,0,2])
-        
+
         for time_index in range(config.max_sentence_length):
             if time_index==0:
                 prev_probs = beam_probs_t[time_index]
             else:
-                prev_probs_t = tf.transpose(prev_probs, [1,0])
                 probs_candidates = []
                 probabilities = beam_probs_t[time_index]
-                probabilities_t = tf.transpose(probabilities, [1,0])
-                for b in range(config.crf_beamsize):
-                    for bb in range(config.crf_beamsize):
-                        probs_candidates.append(tf.multiply(prev_probs_t[b], probabilities_t[bb]))
+                for b in range(tf.to_int32(b_size)):
+                	probs_candidates.append(tf.reshape(tf.matmul(tf.reshape(prev_probs[b], [config.crf_beamsize, 1]), probabilities[b]), [-1]))
 
-                temp_probs = tf.stack(probs_candidates, axis=1)
+                temp_probs = tf.stack(probs_candidates, axis=0)
                 prev_probs, _ = tf.nn.top_k(temp_probs, k=config.crf_beamsize, sorted=True)
 
         return tf.reduce_sum(prev_probs, axis=1)
@@ -950,3 +947,6 @@ class NER(object):
         train_operation = optimizer.apply_gradients(zip(clipped_gradients, variables))
 
         return train_operation
+
+
+
