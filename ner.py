@@ -195,7 +195,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn":
+        elif config.inference=="decoder_rnn" or config.inference=="crf_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -410,7 +410,7 @@ def test_NER():
 
         tf.set_random_seed(config.random_seed)
         session.run(init)
-        saver.restore(session, './new_greedy/exp5/weights/ner.weights')
+        saver.restore(session, './weights/ner.weights')
         print
         print
         print 'Dev'
@@ -472,5 +472,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  #run_NER()
-  test_NER()
+  run_NER()
+  #test_NER()
