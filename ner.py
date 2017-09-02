@@ -268,7 +268,6 @@ def run_NER():
             print 'Epoch {}'.format(epoch)
             start = time.time()
             ###
-            
             #manually reseting adam optimizer
             if(epoch==6 or epoch==12 or epoch==18):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
@@ -411,7 +410,7 @@ def test_NER():
 
         tf.set_random_seed(config.random_seed)
         session.run(init)
-        saver.restore(session, './weights/ner.weights')
+        saver.restore(session, './new_greedy/exp5/weights/ner.weights')
         print
         print
         print 'Dev'
@@ -473,5 +472,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  run_NER()
-  #test_NER()
+  #run_NER()
+  test_NER()
