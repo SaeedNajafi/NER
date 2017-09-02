@@ -757,13 +757,11 @@ class NER(object):
             if time_index==0:
                 prev_probs = beam_probs_t[time_index]
             else:
-                probs_candidates = []
                 probabilities = beam_probs_t[time_index]
-                for b in range(tf.to_int32(b_size)):
-                	probs_candidates.append(tf.reshape(tf.matmul(tf.reshape(prev_probs[b], [config.crf_beamsize, 1]), probabilities[b]), [-1]))
-
-                temp_probs = tf.stack(probs_candidates, axis=0)
-                prev_probs, _ = tf.nn.top_k(temp_probs, k=config.crf_beamsize, sorted=True)
+		prev_probs = tf.exand_dims(prev_probs, axis=2)
+		probabilities = tf.exand_dims(probabilities, axis=1)
+		probs_candidates = tf.reshape(tf.multiply(prev_probs, probabilities), [-1, config.crf_beamsize * config.crf_beamsize])
+                prev_probs, _ = tf.nn.top_k(probs_candidates, k=config.crf_beamsize, sorted=True)
 
         return tf.reduce_sum(prev_probs, axis=1)
 
