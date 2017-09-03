@@ -720,26 +720,31 @@ class NER(object):
                             (-1, config.max_sentence_length, config.tag_size)
                         )
 
-        #preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder, -1))
+
+
+        rnn_loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
 
         preds = preds - tf.expand_dims(tf.reduce_max(preds, axis=2), axis=2)
-        softmax_pred = tf.nn.softmax(preds)
-        Y = tf.one_hot(self.tag_placeholder, config.tag_size, on_value=1.0, off_value=0.0)
-        rnn_probs = tf.reduce_sum(tf.multiply(Y, softmax_pred), axis=2)
-        rnn_log_likelihood = tf.reduce_sum(tf.multiply(tf.log(rnn_probs), self.word_mask_placeholder), axis=1)
-
-        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder, -1))
         true_seqeunce_scores = tf.contrib.crf.crf_unary_score(
                                     tag_indices=self.tag_placeholder,
                                     sequence_lengths=self.sentence_length_placeholder,
                                     inputs=preds
                                     )
 
+        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder, -1))
         Z = self.simple_beam_search(preds, config)
         crf_log_likelihood = true_seqeunce_scores - tf.log(Z)
-        
-        batch_loss = rnn_log_likelihood
-        self.loss = tf.reduce_mean(batch_loss)
+        crf_loss = tf.reduce_mean(-crf_log_likelihood)
+
+        alpha = tf.Variable(0.1, dtype=tf.float32)
+        self.loss = (1-alpha) * rnn_loss + alpha * crf_loss
+
         return self.loss
 
     def simple_beam_search(self, probs, config):
