@@ -746,8 +746,8 @@ class NER(object):
         crf_loss = tf.reduce_mean(-log_likelihood)
 
         crf_turn = self.loss_switch_placeholder
-        self.loss = (1.0 - crf_turn) * rnn_loss + crf_turn * crf_loss
-
+        #self.loss = (1.0 - crf_turn) * rnn_loss + crf_turn * crf_loss
+	self.loss = rnn_loss
         return self.loss
 
     def simple_beam_search(self, probs, config):
