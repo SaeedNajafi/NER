@@ -149,7 +149,6 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
-                    loss_switch_batch=0.0,
                     tag_batch=tag_data
                 )
 
