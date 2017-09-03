@@ -732,15 +732,17 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
+	preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
+	preds = preds - tf.expand_dims(tf.reduce_max(preds, axis=2), axis=2)
         true_seqeunce_scores = tf.contrib.crf.crf_unary_score(
                                     tag_indices=self.tag_placeholder,
                                     sequence_lengths=self.sentence_length_placeholder,
                                     inputs=preds
                                     )
 
-        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
         Z = self.simple_beam_search(preds, config)
-        log_likelihood = true_seqeunce_scores - tf.log(Z)
+        #log_likelihood = true_seqeunce_scores - tf.log(tf.clip_by_value(Z, 1e-8, 1e+8))
+	log_likelihood = true_seqeunce_scores - tf.log(Z)
         self.crf_loss = tf.reduce_mean(-log_likelihood)
 
         return
