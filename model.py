@@ -742,8 +742,8 @@ class NER(object):
         crf_log_likelihood = true_seqeunce_scores - tf.log(Z)
         crf_loss = tf.reduce_mean(-crf_log_likelihood)
 
-        alpha = tf.Variable(0.1, dtype=tf.float32)
-        self.loss = (1-alpha) * rnn_loss + alpha * crf_loss
+        #alpha = tf.Variable(0.1, dtype=tf.float32)
+        self.loss = 0.5 * rnn_loss + 0.5 * crf_loss
 
         return self.loss
 
