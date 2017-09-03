@@ -18,15 +18,12 @@ class NER(object):
 
         if config.inference=="softmax":
             loss = self.train_by_softmax(H, config)
-            self.train_op = self.add_training_op(loss, config)
 
         elif config.inference=="crf":
             loss = self.train_by_crf(H, config)
-            self.train_op = self.add_training_op(loss, config)
 
         elif config.inference=="decoder_rnn":
             loss = self.train_by_decoder_rnn(H, config)
-            self.train_op = self.add_training_op(loss, config)
 
             if config.decoding=="greedy":
                 self.greedy_decoding(H, config)
@@ -35,9 +32,7 @@ class NER(object):
                 self.beamsearch_decoding(H, config)
 
         elif config.inference=="crf_rnn":
-            self.train_by_crf_rnn(H, config)
-            self.rnn_train_op = self.add_training_op(self.rnn_loss, config, "rnn")
-            self.crf_train_op = self.add_training_op(self.crf_loss, config, "crf")
+            loss = self.train_by_crf_rnn(H, config)
 
             if config.decoding=="greedy":
                 self.greedy_decoding(H, config)
@@ -45,6 +40,7 @@ class NER(object):
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
+        self.train_op = self.add_training_op(loss, config)
         return
 
     def placeholders(self, config):
@@ -633,6 +629,7 @@ class NER(object):
         Defines the loss during training.
         """
 
+
         #we need to define a tag embedding layer.
         with tf.variable_scope("tag_embedding_layer"):
             tag_lookup_table = tf.get_variable(
@@ -724,16 +721,17 @@ class NER(object):
                         )
 
 
-        self.rnn_loss = tf.contrib.seq2seq.sequence_loss(
+        rnn_cross_loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
                                     average_across_timesteps=True,
-                                    average_across_batch=True
+                                    average_across_batch=False
                                     )
 
-	preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
-	preds = preds - tf.expand_dims(tf.reduce_max(preds, axis=2), axis=2)
+        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
+        preds = preds - tf.expand_dims(tf.reduce_max(preds, axis=2), axis=2)
+
         true_seqeunce_scores = tf.contrib.crf.crf_unary_score(
                                     tag_indices=self.tag_placeholder,
                                     sequence_lengths=self.sentence_length_placeholder,
@@ -741,10 +739,10 @@ class NER(object):
                                     )
 
         Z = self.simple_beam_search(preds, config)
-        #log_likelihood = true_seqeunce_scores - tf.log(tf.clip_by_value(Z, 1e-8, 1e+8))
-	log_likelihood = true_seqeunce_scores - tf.log(Z)
-        self.crf_loss = tf.reduce_mean(-log_likelihood)
+        crf_log_likelihood = true_seqeunce_scores - tf.log(Z)
 
+        batch_loss = rnn_cross_loss - crf_log_likelihood
+        self.loss = tf.reduce_mean(batch_loss)
         return
 
     def simple_beam_search(self, probs, config):
@@ -925,7 +923,7 @@ class NER(object):
 
         return
 
-    def add_training_op(self, loss, config, name):
+    def add_training_op(self, loss, config):
         """Sets up the training Ops.
 
         Creates an optimizer and applies the gradients to all trainable variables.
@@ -940,7 +938,7 @@ class NER(object):
         """
 
         #we use adam optimizer
-        with tf.variable_scope(name + "_" + "adam_optimizer"):
+        with tf.variable_scope("adam_optimizer"):
             optimizer = tf.train.AdamOptimizer(config.learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(loss))
         clipped_gradients, global_norm = tf.clip_by_global_norm(gradients, config.max_gradient_norm)

@@ -14,7 +14,6 @@ import utils as ut
 def run_epoch(
             config,
             model,
-            crf_turn,
             session,
             char_X,
             word_length_X,
@@ -61,17 +60,8 @@ def run_epoch(
                     tag_batch=tag_data
                 )
 
-        if config.inference=="crf_rnn":
-            if crf_turn:
-                loss, _ = session.run([model.crf_loss, model.crf_train_op], feed_dict=feed)
-                total_loss.append(loss)
-
-            else:
-                loss, _ = session.run([model.rnn_loss, model.rnn_train_op], feed_dict=feed)
-                total_loss.append(loss)
-        else:
-            loss, _ = session.run([model.loss, model.train_op], feed_dict=feed)
-            total_loss.append(loss)
+        loss, _ = session.run([model.loss, model.train_op], feed_dict=feed)
+        total_loss.append(loss)
 
         ##
         if verbose and step % verbose == 0:
@@ -276,26 +266,17 @@ def run_NER():
             print
             print 'Epoch {}'.format(epoch)
 
-            #for alternating between crf loss and rnn loss
-            if epoch%2==0:
-                crf_turn = False
-            else:
-                crf_turn = True
-
             start = time.time()
             ###
 
             #manually reseting adam optimizer
             if(epoch==6 or epoch==12 or epoch==18 or epoch==24 or epoch==30):
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "rnn_adam_optimizer")
-                session.run(tf.variables_initializer(optimizer_scope))
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "crf_adam_optimizer")
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
             train_loss = run_epoch(
                                     config,
                                     model,
-                                    crf_turn,
                                     session,
                                     data['train_data']['char_X'],
                                     data['train_data']['word_length_X'],
