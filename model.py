@@ -18,12 +18,15 @@ class NER(object):
 
         if config.inference=="softmax":
             loss = self.train_by_softmax(H, config)
+            self.train_op = self.add_training_op(loss, config)
 
         elif config.inference=="crf":
             loss = self.train_by_crf(H, config)
+            self.train_op = self.add_training_op(loss, config)
 
         elif config.inference=="decoder_rnn":
             loss = self.train_by_decoder_rnn(H, config)
+            self.train_op = self.add_training_op(loss, config)
 
             if config.decoding=="greedy":
                 self.greedy_decoding(H, config)
@@ -32,16 +35,15 @@ class NER(object):
                 self.beamsearch_decoding(H, config)
 
         elif config.inference=="crf_rnn":
-            loss = self.train_by_crf_rnn(H, config)
+            self.train_by_crf_rnn(H, config)
+            self.rnn_train_op = self.add_training_op(self.rnn_loss, config, "rnn")
+            self.crf_train_op = self.add_training_op(self.crf_loss, config, "crf")
 
             if config.decoding=="greedy":
                 self.greedy_decoding(H, config)
 
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
-
-
-        self.train_op = self.add_training_op(loss, config)
 
         return
 
@@ -92,8 +94,6 @@ class NER(object):
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
-        self.loss_switch_placeholder = tf.placeholder(dtype=tf.float32, shape=())
-
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -103,7 +103,6 @@ class NER(object):
                         word_mask_batch,
                         sentence_length_batch,
                         dropout_batch,
-                        loss_switch_batch,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -122,8 +121,7 @@ class NER(object):
             self.word_input_placeholder: word_input_batch,
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
-            self.dropout_placeholder: dropout_batch,
-            self.loss_switch_placeholder: loss_switch_batch
+            self.dropout_placeholder: dropout_batch
             }
 
         if tag_batch is not None:
@@ -726,7 +724,7 @@ class NER(object):
                         )
 
 
-        rnn_loss = tf.contrib.seq2seq.sequence_loss(
+        self.rnn_loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
@@ -743,12 +741,9 @@ class NER(object):
         preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
         Z = self.simple_beam_search(preds, config)
         log_likelihood = true_seqeunce_scores - tf.log(Z)
-        crf_loss = tf.reduce_mean(-log_likelihood)
+        self.crf_loss = tf.reduce_mean(-log_likelihood)
 
-        crf_turn = self.loss_switch_placeholder
-        #self.loss = (1.0 - crf_turn) * rnn_loss + crf_turn * crf_loss
-	self.loss = rnn_loss
-        return self.loss
+        return
 
     def simple_beam_search(self, probs, config):
         #batch size
@@ -928,7 +923,7 @@ class NER(object):
 
         return
 
-    def add_training_op(self, loss, config):
+    def add_training_op(self, loss, config, name):
         """Sets up the training Ops.
 
         Creates an optimizer and applies the gradients to all trainable variables.
@@ -943,7 +938,7 @@ class NER(object):
         """
 
         #we use adam optimizer
-        with tf.variable_scope("adam_optimizer"):
+        with tf.variable_scope(name + "_" + "adam_optimizer"):
             optimizer = tf.train.AdamOptimizer(config.learning_rate)
         gradients, variables = zip(*optimizer.compute_gradients(loss))
         clipped_gradients, global_norm = tf.clip_by_global_norm(gradients, config.max_gradient_norm)

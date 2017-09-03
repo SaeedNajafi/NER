@@ -58,13 +58,20 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
-                    loss_switch_batch=crf_turn,
                     tag_batch=tag_data
                 )
 
+        if config.inference=="crf_rnn":
+            if crf_turn:
+                loss, _ = session.run([model.crf_loss, model.crf_train_op], feed_dict=feed)
+                total_loss.append(loss)
 
-        loss, _ = session.run([model.loss, model.train_op],feed_dict=feed)
-        total_loss.append(loss)
+            else:
+                loss, _ = session.run([model.rnn_loss, model.rnn_train_op], feed_dict=feed)
+                total_loss.append(loss)
+        else:
+            loss, _ = session.run([model.loss, model.train_op], feed_dict=feed)
+            total_loss.append(loss)
 
         ##
         if verbose and step % verbose == 0:
@@ -272,16 +279,18 @@ def run_NER():
 
             #for alternating between crf loss and rnn loss
             if epoch%2==0:
-                crf_turn = 0.0
+                crf_turn = False
             else:
-                crf_turn = 1.0
+                crf_turn = True
 
             start = time.time()
             ###
 
             #manually reseting adam optimizer
             if(epoch==6 or epoch==12 or epoch==18 or epoch==24 or epoch==30):
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "rnn_adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "crf_adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
             train_loss = run_epoch(
