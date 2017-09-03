@@ -740,7 +740,7 @@ class NER(object):
         
         batch_loss = rnn_log_likelihood
         self.loss = tf.reduce_mean(batch_loss)
-        return
+        return self.loss
 
     def simple_beam_search(self, probs, config):
         #batch size
