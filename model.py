@@ -90,6 +90,8 @@ class NER(object):
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
+        self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -99,6 +101,7 @@ class NER(object):
                         word_mask_batch,
                         sentence_length_batch,
                         dropout_batch,
+                        alpha_batch,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -117,7 +120,8 @@ class NER(object):
             self.word_input_placeholder: word_input_batch,
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
-            self.dropout_placeholder: dropout_batch
+            self.dropout_placeholder: dropout_batch,
+            self.alpha_placeholder: alpha_batch
             }
 
         if tag_batch is not None:
@@ -742,8 +746,7 @@ class NER(object):
         crf_log_likelihood = true_seqeunce_scores - tf.log(Z)
         crf_loss = tf.reduce_mean(-crf_log_likelihood)
 
-        #alpha = tf.Variable(0.1, dtype=tf.float32)
-        self.loss = 0.5 * rnn_loss + 0.5 * crf_loss
+        self.loss = (1-self.alpha_placeholder) * rnn_loss + self.alpha_placeholder * crf_loss
 
         return self.loss
 
