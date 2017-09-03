@@ -743,7 +743,7 @@ class NER(object):
 
         Z = self.simple_beam_search(preds, config)
         crf_log_likelihood = true_seqeunce_scores - tf.log(Z)
-        
+
         alpha = tf.Variable(
                             0.1
                             name="alpha",
