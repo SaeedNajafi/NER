@@ -27,9 +27,6 @@ class Configuration(object):
     #inference = "crf"
     #inference = "decoder_rnn"
     inference = "crf_rnn"
-    E = 0.5
-    K = 0.1
-    C = 0.025
 
     """for decoder_rnn and crf_rnn"""
     decoding="greedy"

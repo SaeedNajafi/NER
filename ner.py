@@ -13,7 +13,6 @@ import utils as ut
 
 def run_epoch(
             config,
-            alpha,
             model,
             session,
             char_X,
@@ -58,7 +57,6 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
-                    alpha_batch=alpha,
                     tag_batch=tag_data
                 )
 
@@ -141,7 +139,6 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
-                    alpha_batch=0.0,
                     tag_batch=tag_data
                 )
 
@@ -269,7 +266,6 @@ def run_NER():
             print
             print 'Epoch {}'.format(epoch)
 
-            alpha = np.minimum(config.E, config.K + config.C * epoch)
             start = time.time()
             ###
 
@@ -280,7 +276,6 @@ def run_NER():
 
             train_loss = run_epoch(
                                     config,
-                                    alpha,
                                     model,
                                     session,
                                     data['train_data']['char_X'],

@@ -90,8 +90,6 @@ class NER(object):
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
-        self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
-
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -746,7 +744,7 @@ class NER(object):
         crf_log_likelihood = true_seqeunce_scores - tf.log(Z)
         crf_loss = tf.reduce_mean(-crf_log_likelihood)
 
-        self.loss = (1-self.alpha_placeholder) * rnn_loss + self.alpha_placeholder * crf_loss
+        self.loss = 0.9 * rnn_loss + 0.1 * crf_loss
 
         return self.loss
 
