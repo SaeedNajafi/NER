@@ -99,7 +99,6 @@ class NER(object):
                         word_mask_batch,
                         sentence_length_batch,
                         dropout_batch,
-                        alpha_batch,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -118,8 +117,7 @@ class NER(object):
             self.word_input_placeholder: word_input_batch,
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
-            self.dropout_placeholder: dropout_batch,
-            self.alpha_placeholder: alpha_batch
+            self.dropout_placeholder: dropout_batch
             }
 
         if tag_batch is not None:
