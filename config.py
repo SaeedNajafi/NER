@@ -26,13 +26,11 @@ class Configuration(object):
     #inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
-    inference = "crf_rnn"
 
-    """for decoder_rnn and crf_rnn"""
+    """for decoder_rnn"""
     decoding="greedy"
     #decoding="beamsearch"
     #beamsize=4
-    crf_beamsize = tag_size
 
     """path to different files"""
     word_dic_path = './data/glove_en_word_100_dic.txt'
