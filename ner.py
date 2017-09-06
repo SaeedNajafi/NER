@@ -14,6 +14,8 @@ import utils as ut
 def run_epoch(
             config,
             model,
+            flip_prob,
+            epoch,
             session,
             char_X,
             word_length_X,
@@ -49,6 +51,9 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
+        t = time.clock()
+        np.random.seed(step + epoch + (int)t)
+        flip_coin = np.random.uniform(low=0.0, high=1.0)
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -57,6 +62,8 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
+                    flip_prob_batch=flip_prob,
+                    flip_coin_batch=flip_coin,
                     tag_batch=tag_data
                 )
 
@@ -194,7 +201,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn":
+        elif config.inference=="decoder_rnn" or config.inference=="scheduled_decoder_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -268,6 +275,8 @@ def run_NER():
 
             start = time.time()
             ###
+            k = 6.0
+            flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
 
             #manually reseting adam optimizer
             if(epoch==6 or epoch==12 or epoch==18 or epoch==24 or epoch==30):
@@ -277,6 +286,8 @@ def run_NER():
             train_loss = run_epoch(
                                     config,
                                     model,
+                                    flip_prob,
+                                    epoch,
                                     session,
                                     data['train_data']['char_X'],
                                     data['train_data']['word_length_X'],
