@@ -663,22 +663,10 @@ class NER(object):
                             tf.constant_initializer(0.0)
                             )
 
-        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-        b_size = tf.shape(tag_embeddings)[0]
+        b_size = tf.shape(H)[0]
 
-        #add GO symbol into the begining of every sentence and
-        #shift rest by one position.
-
-        temp = []
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
-        for time_index in range(config.max_sentence_length):
-            if time_index==0:
-                temp.append(GO_symbol)
-            else:
-                temp.append(tag_embeddings_t[time_index-1])
-
-        tag_embeddings_final = temp
+        tag_t = tf.transpose(self.tag_placeholder, [1,0])
         H_t = tf.transpose(H, [1,0,2])
         preds = []
 
@@ -714,8 +702,8 @@ class NER(object):
                 predictions = tf.nn.softmax(pred)
 
                 ## flip a coin and select the true previous tag or the generated one.
-                def opt1(): return tag_embeddings_final[time_index]
-                def opt2(): return tf.argmax(predictions, axis=1)
+                def opt1(): return tag_t[time_index-1]
+                def opt2(): return tf.argmax(predictions, axis=1, output_type=tf.int32)
                 predicted_indices = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
 
         preds = tf.stack(preds, axis=1)

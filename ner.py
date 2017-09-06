@@ -52,7 +52,7 @@ def run_epoch(
                 tag_data) in enumerate(data):
 
         t = time.clock()
-        np.random.seed(step + epoch + (int)t)
+        np.random.seed(step + epoch + int(t))
         flip_coin = np.random.uniform(low=0.0, high=1.0)
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
