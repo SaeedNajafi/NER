@@ -16,6 +16,7 @@ def run_epoch(
             model,
             flip_prob,
             epoch,
+            alpha,
             session,
             char_X,
             word_length_X,
@@ -64,6 +65,7 @@ def run_epoch(
                     dropout_batch=config.dropout,
                     flip_prob_batch=flip_prob,
                     flip_coin_batch=flip_coin,
+                    alpha_batch=alpha,
                     tag_batch=tag_data
                 )
 
@@ -148,6 +150,7 @@ def predict(
                     dropout_batch=dp,
                     flip_prob_batch=1.0,
                     flip_coin_batch=0.0,
+                    alpha_batch=17,
                     tag_batch=tag_data
                 )
 
@@ -278,6 +281,7 @@ def run_NER():
             start = time.time()
             ###
             k = 6.0
+            alpha = 17
             flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
 
             #manually reseting adam optimizer
@@ -290,6 +294,7 @@ def run_NER():
                                     model,
                                     flip_prob,
                                     epoch,
+                                    alpha,
                                     session,
                                     data['train_data']['char_X'],
                                     data['train_data']['word_length_X'],

@@ -94,6 +94,8 @@ class NER(object):
 
         self.flip_coin_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
+        self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -105,6 +107,7 @@ class NER(object):
                         dropout_batch,
                         flip_prob_batch,
                         flip_coin_batch,
+                        alpha_batch,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -125,7 +128,8 @@ class NER(object):
             self.sentence_length_placeholder: sentence_length_batch,
             self.dropout_placeholder: dropout_batch,
             self.flip_prob_placeholder: flip_prob_batch,
-            self.flip_coin_placeholder: flip_coin_batch
+            self.flip_coin_placeholder: flip_coin_batch,
+            self.alpha_placeholder: alpha_batch
             }
 
         if tag_batch is not None:
@@ -691,7 +695,6 @@ class NER(object):
                     output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
                 else:
                     scope.reuse_variables()
-                    prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
                     output, state = self.decoder_lstm_cell(prev_output, state)
 
 
@@ -702,9 +705,10 @@ class NER(object):
                 predictions = tf.nn.softmax(pred)
 
                 ## flip a coin and select the true previous tag or the generated one.
-                def opt1(): return tag_t[time_index-1]
-                def opt2(): return tf.argmax(predictions, axis=1, output_type=tf.int32)
-                predicted_indices = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
+                def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
+                #def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1, output_type=tf.int32))
+                def opt3(): return self.soft_argmax(predictions, tag_lookup_table)
+                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt3)
 
         preds = tf.stack(preds, axis=1)
         self.loss = tf.contrib.seq2seq.sequence_loss(
@@ -715,6 +719,15 @@ class NER(object):
                                     average_across_batch=True
                                     )
         return self.loss
+
+    def soft_argmax(self, predictions, tag_lookup_table):
+        exp_probs = tf.exp(tf.multiply(self.alpha_placeholder, predicitons))
+        sum_exp_probs = tf.reduce_sum(exp_probs, axis=1)
+        coefficient = tf.divide(exp_probs, sum_exp_probs)
+        prev_output = tf.matmul(coefficient, tag_lookup_table)
+
+        return prev_output
+
 
     def greedy_decoding(self, H, config):
 
