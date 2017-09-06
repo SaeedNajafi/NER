@@ -146,8 +146,8 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
-		    flip_prob_batch=1.0,
-		    flip_coin_batch=0.0,
+                    flip_prob_batch=1.0,
+                    flip_coin_batch=0.0,
                     tag_batch=tag_data
                 )
 
