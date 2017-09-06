@@ -31,8 +31,8 @@ class NER(object):
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
-        elif config.inference=="crf_rnn":
-            loss = self.train_by_crf_rnn(H, config)
+        elif config.inference=="scheduled_decoder_rnn":
+            loss = self.train_by_scheduled_decoder_rnn(H, config)
 
             if config.decoding=="greedy":
                 self.greedy_decoding(H, config)
@@ -40,9 +40,7 @@ class NER(object):
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
-
         self.train_op = self.add_training_op(loss, config)
-
         return
 
     def placeholders(self, config):
@@ -92,6 +90,10 @@ class NER(object):
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
+        self.flip_prob_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
+        self.flip_coin_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -101,6 +103,8 @@ class NER(object):
                         word_mask_batch,
                         sentence_length_batch,
                         dropout_batch,
+                        flip_prob_batch,
+                        flip_coin_batch,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -119,7 +123,9 @@ class NER(object):
             self.word_input_placeholder: word_input_batch,
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
-            self.dropout_placeholder: dropout_batch
+            self.dropout_placeholder: dropout_batch,
+            self.flip_prob_placeholder: flip_prob_batch,
+            self.flip_coin_placeholder: flip_coin_batch
             }
 
         if tag_batch is not None:
@@ -624,10 +630,10 @@ class NER(object):
 
         return self.loss
 
-    def train_by_crf_rnn(self, H, config):
+    def train_by_scheduled_decoder_rnn(self, H, config):
 
         """
-        Apply a crf_rnn layer in the training step to get a score for each tag.
+        Apply a decoder_rnn layer in the training step to get a score for each tag.
         Defines the loss during training.
         """
 
@@ -640,54 +646,6 @@ class NER(object):
                                     trainable= True,
                                     initializer = self.xavier_initializer
                                     )
-
-        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-        b_size = tf.shape(tag_embeddings)[0]
-
-        #add GO symbol into the begining of every sentence and
-        #shift rest by one position.
-
-        temp = []
-        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
-        for time_index in range(config.max_sentence_length):
-            if time_index==0:
-                temp.append(GO_symbol)
-            else:
-                temp.append(tag_embeddings_t[time_index-1])
-
-        temp = tf.stack(temp, axis=1)
-
-        tag_embeddings_final = temp
-        with tf.variable_scope('decoder_rnn') as scope:
-            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
-                                        num_units=config.decoder_rnn_hidden_units,
-                                        use_peepholes=False,
-                                        cell_clip=None,
-                                        initializer=self.xavier_initializer,
-                                        num_proj=None,
-                                        proj_clip=None,
-                                        num_unit_shards=None,
-                                        num_proj_shards=None,
-                                        forget_bias=1.0,
-                                        state_is_tuple=True,
-                                        activation=tf.tanh
-                                        )
-
-            tag_scores, _ = tf.nn.dynamic_rnn(
-                                    self.decoder_lstm_cell,
-                                    tag_embeddings_final,
-                                    sequence_length=self.sentence_length_placeholder,
-                                    initial_state=None,
-                                    dtype=tf.float32,
-                                    parallel_iterations=None,
-                                    swap_memory=False,
-                                    time_major=False,
-                                    scope=scope
-                                    )
-
-        tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-        H_and_tag_scores = tf.concat([H,tag_scores_dropped], axis=2)
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
@@ -705,70 +663,70 @@ class NER(object):
                             tf.constant_initializer(0.0)
                             )
 
-            preds = tf.add(
-                        tf.matmul(
-                            tf.reshape(
-                                H_and_tag_scores,
-                                (-1, config.word_rnn_hidden_units + config.decoder_rnn_hidden_units)
-                            ),
-                            U_softmax
-                        ),
-                        b_softmax
-                    )
+        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
+        b_size = tf.shape(tag_embeddings)[0]
 
-            preds = tf.reshape(
-                            preds,
-                            (-1, config.max_sentence_length, config.tag_size)
-                        )
+        #add GO symbol into the begining of every sentence and
+        #shift rest by one position.
+
+        temp = []
+        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
+        for time_index in range(config.max_sentence_length):
+            if time_index==0:
+                temp.append(GO_symbol)
+            else:
+                temp.append(tag_embeddings_t[time_index-1])
+
+        tag_embeddings_final = temp
+        H_t = tf.transpose(H, [1,0,2])
+        preds = []
+
+        with tf.variable_scope('decoder_rnn', reuse=None) as scope:
+            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+                                        num_units=config.decoder_rnn_hidden_units,
+                                        use_peepholes=False,
+                                        cell_clip=None,
+                                        initializer=self.xavier_initializer,
+                                        num_proj=None,
+                                        proj_clip=None,
+                                        num_unit_shards=None,
+                                        num_proj_shards=None,
+                                        forget_bias=1.0,
+                                        state_is_tuple=True,
+                                        activation=tf.tanh
+                                        )
+
+            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+            for time_index in range(config.max_sentence_length):
+                if time_index==0:
+                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
+                else:
+                    scope.reuse_variables()
+                    prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
+                    output, state = self.decoder_lstm_cell(prev_output, state)
 
 
-        rnn_loss = tf.contrib.seq2seq.sequence_loss(
+                output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
+                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+                preds.append(pred)
+                predictions = tf.nn.softmax(pred)
+
+                ## flip a coin and select the true previous tag or the generated one.
+                def opt1(): return tag_embeddings_final[time_index]
+                def opt2(): return tf.argmax(predictions, axis=1)
+                predicted_indices = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
+
+        preds = tf.stack(preds, axis=1)
+        self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
                                     average_across_timesteps=True,
                                     average_across_batch=True
                                     )
-
-        true_seqeunce_scores = tf.contrib.crf.crf_unary_score(
-                                    tag_indices=self.tag_placeholder,
-                                    sequence_lengths=self.sentence_length_placeholder,
-                                    inputs=preds
-                                    )
-
-        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder,-1))
-        Z = self.simple_beam_search(tf.exp(preds), config)
-        log_likelihood = true_seqeunce_scores - tf.log(Z)
-        crf_loss = tf.reduce_mean(-log_likelihood)
-
-        self.loss = rnn_loss + crf_loss
-
         return self.loss
-
-    def simple_beam_search(self, probs, config):
-        #batch size
-        b_size = tf.shape(probs)[0]
-
-        beam_probs, _ = tf.nn.top_k(probs, k=config.crf_beamsize, sorted=True)
-
-        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
-        
-        for time_index in range(config.max_sentence_length):
-            if time_index==0:
-                prev_probs = beam_probs_t[time_index]
-            else:
-                prev_probs_t = tf.transpose(prev_probs, [1,0])
-                probs_candidates = []
-                probabilities = beam_probs_t[time_index]
-                probabilities_t = tf.transpose(probabilities, [1,0])
-                for b in range(config.crf_beamsize):
-                    for bb in range(config.crf_beamsize):
-                        probs_candidates.append(tf.multiply(prev_probs_t[b], probabilities_t[bb]))
-
-                temp_probs = tf.stack(probs_candidates, axis=1)
-                prev_probs, _ = tf.nn.top_k(temp_probs, k=config.crf_beamsize, sorted=True)
-
-        return tf.reduce_sum(prev_probs, axis=1)
 
     def greedy_decoding(self, H, config):
 
