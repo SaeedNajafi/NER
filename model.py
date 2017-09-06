@@ -721,9 +721,9 @@ class NER(object):
         return self.loss
 
     def soft_argmax(self, predictions, tag_lookup_table):
-        exp_probs = tf.exp(tf.multiply(self.alpha_placeholder, predicitons))
+        exp_probs = tf.exp(tf.multiply(self.alpha_placeholder, predictions))
         sum_exp_probs = tf.reduce_sum(exp_probs, axis=1)
-        coefficient = tf.divide(exp_probs, sum_exp_probs)
+        coefficient = tf.divide(exp_probs, tf.expand_dims(sum_exp_probs, axis=-1))
         prev_output = tf.matmul(coefficient, tag_lookup_table)
 
         return prev_output
