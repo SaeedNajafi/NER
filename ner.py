@@ -280,8 +280,8 @@ def run_NER():
 
             start = time.time()
             ###
-            k = 6.0
-            alpha = 17
+            k = 10.0
+            alpha = 10.0
             flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
 
             #manually reseting adam optimizer
