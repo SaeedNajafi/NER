@@ -706,9 +706,9 @@ class NER(object):
 
                 ## flip a coin and select the true previous tag or the generated one.
                 def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
-                #def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1, output_type=tf.int32))
-                def opt3(): return self.soft_argmax(predictions, tag_lookup_table)
-                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt3)
+                def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1))
+                #def opt3(): return self.soft_argmax(predictions, tag_lookup_table)
+                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
 
         preds = tf.stack(preds, axis=1)
         self.loss = tf.contrib.seq2seq.sequence_loss(
