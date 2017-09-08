@@ -20,13 +20,13 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 48
     early_stopping = 3
-    random_seed = 11
+    random_seed = 100001
 
     """inference type"""
     #inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
-    inference = "scheduled_decoder_rnn"
+    #inference = "scheduled_decoder_rnn"
 
     """for decoder_rnn"""
     decoding="greedy"
@@ -34,9 +34,9 @@ class Configuration(object):
     #beamsize=4
 
     """path to different files"""
-    word_dic_path = './data/glove_en_word_100_dic.txt'
-    word_vectors_path = './data/glove_en_word_100_vectors.txt'
-    char_dic_path = './data/en_char_dic.txt'
-    train_set_path = './data/eng.train.v1'
-    dev_set_path = './data/eng.testa.v1'
-    test_set_path = './data/eng.testb.v1'
+    word_dic_path = './en_data/glove_en_word_100_dic.txt'
+    word_vectors_path = './en_data/glove_en_word_100_vectors.txt'
+    char_dic_path = './en_data/en_char_dic.txt'
+    train_set_path = './en_data/eng.train.v1'
+    dev_set_path = './en_data/eng.testa.v1'
+    test_set_path = './en_data/eng.testb.v1'
