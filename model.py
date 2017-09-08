@@ -562,7 +562,6 @@ class NER(object):
 
         tag_embeddings_final = temp
         with tf.variable_scope('decoder_rnn') as scope:
-            '''
 	    self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
@@ -576,8 +575,6 @@ class NER(object):
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
-            '''
-	    self.decoder_lstm_cell = tf.contrib.rnn.BasicRNNCell(num_units=config.decoder_rnn_hidden_units, activation=tf.tanh)
             tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
@@ -708,9 +705,9 @@ class NER(object):
 
                 ## flip a coin and select the true previous tag or the generated one.
                 def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
-                def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1))
-                #def opt3(): return self.soft_argmax(predictions, tag_lookup_table)
-                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
+                #def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1))
+                def opt3(): return self.soft_argmax(predictions, tag_lookup_table)
+                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt3)
 
         preds = tf.stack(preds, axis=1)
         self.loss = tf.contrib.seq2seq.sequence_loss(

@@ -20,13 +20,13 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 48
     early_stopping = 3
-    random_seed = 101
+    random_seed = 11
 
     """inference type"""
     #inference = "softmax"
     #inference = "crf"
-    inference = "decoder_rnn"
-    #inference = "scheduled_decoder_rnn"
+    #inference = "decoder_rnn"
+    inference = "scheduled_decoder_rnn"
 
     """for decoder_rnn"""
     decoding="greedy"
