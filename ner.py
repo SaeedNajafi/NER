@@ -280,7 +280,7 @@ def run_NER():
 
             start = time.time()
             ###
-            k = 7.5
+            k = 10.0
             alpha = 10.0
             flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
 	    if(epoch==0): flip_prob=1.0

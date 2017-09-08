@@ -562,7 +562,8 @@ class NER(object):
 
         tag_embeddings_final = temp
         with tf.variable_scope('decoder_rnn') as scope:
-            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+            '''
+	    self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
@@ -575,7 +576,8 @@ class NER(object):
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
-
+            '''
+	    self.decoder_lstm_cell = tf.contrib.rnn.BasicRNNCell(num_units=config.decoder_rnn_hidden_units, activation=tf.tanh)
             tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
