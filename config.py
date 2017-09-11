@@ -21,6 +21,7 @@ class Configuration(object):
     max_epochs = 48
     early_stopping = 3
     random_seed = 101
+    crf_beamsize=17
 
     """inference type"""
     #inference = "softmax"

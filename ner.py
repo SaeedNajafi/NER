@@ -55,6 +55,10 @@ def run_epoch(
         t = time.clock()
         np.random.seed(step + epoch + int(t))
         flip_coin = np.random.uniform(low=0.0, high=1.0)
+        if(epoch<=10):
+            flip_coin = 0.0
+        else:
+            flip_coin = 1.0
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -273,17 +277,18 @@ def run_NER():
 
         session.run(init)
         first_start = time.time()
-
+        alpha = 10
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
 
             start = time.time()
             ###
-            k = 15
-            alpha = 1000
-            flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
-            if(epoch<=9): flip_prob=1.0
+            #k = 15
+            if(epoch>10): alpha = np.minimum(alpha * 3, 1000)
+            
+            #flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
+            flip_prob=0.5
             #manually reseting adam optimizer
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
