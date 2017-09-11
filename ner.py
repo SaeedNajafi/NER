@@ -280,10 +280,10 @@ def run_NER():
 
             start = time.time()
             ###
-            k = 10
-            alpha = 5.0
+            k = 15
+            alpha = 1000
             flip_prob = np.divide( k, k + np.exp( np.divide(epoch,k) ) )
-	    if(epoch==0): flip_prob=1.0
+            if(epoch<=9): flip_prob=1.0
             #manually reseting adam optimizer
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
@@ -491,5 +491,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  #run_NER()
-  test_NER()
+  run_NER()
+  #test_NER()

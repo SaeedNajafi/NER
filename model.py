@@ -575,7 +575,6 @@ class NER(object):
                                         state_is_tuple=True,
                                         activation=tf.tanh
                                         )
-	    #self.decoder_lstm_cell = tf.contrib.rnn.BasicRNNCell(num_units=config.decoder_rnn_hidden_units, activation=tf.tanh)
             tag_scores, _ = tf.nn.dynamic_rnn(
                                     self.decoder_lstm_cell,
                                     tag_embeddings_final,
@@ -721,9 +720,7 @@ class NER(object):
         return self.loss
 
     def soft_argmax(self, predictions, tag_lookup_table):
-        exp_probs = tf.exp(tf.multiply(self.alpha_placeholder, predictions))
-        sum_exp_probs = tf.reduce_sum(exp_probs, axis=1)
-        coefficient = tf.divide(exp_probs, tf.expand_dims(sum_exp_probs, axis=-1))
+        coefficient = tf.nn.softmax(tf.multiply(self.alpha_placeholder, predictions))
         prev_output = tf.matmul(coefficient, tag_lookup_table)
 
         return prev_output
