@@ -701,13 +701,12 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 preds.append(pred)
-                predictions = tf.nn.softmax(pred)
 
                 ## flip a coin and select the true previous tag or the generated one.
                 def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
-                #def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1))
-                def opt3(): return self.soft_argmax(predictions, tag_lookup_table)
-                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt3)
+                #def opt(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1))
+                def opt2(): return self.soft_argmax(pred, tag_lookup_table)
+                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
 
         preds = tf.stack(preds, axis=1)
         self.loss = tf.contrib.seq2seq.sequence_loss(
@@ -717,14 +716,30 @@ class NER(object):
                                     average_across_timesteps=True,
                                     average_across_batch=True
                                     )
+
+
         return self.loss
 
-    def soft_argmax(self, predictions, tag_lookup_table):
-        coefficient = tf.nn.softmax(tf.multiply(self.alpha_placeholder, predictions))
+    def soft_argmax(self, pred, tag_lookup_table):
+        coefficient = tf.nn.softmax(tf.multiply(self.alpha_placeholder, pred))
         prev_output = tf.matmul(coefficient, tag_lookup_table)
-
         return prev_output
 
+    def simple_beam_search(self, probs, config):
+        b_size = tf.shape(probs)[0]
+        beam_probs, _ = tf.nn.top_k(tf.exp(probs), k=config.crf_beamsize, sorted=True)
+        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
+        for time_index in range(config.max_sentence_length):
+            if time_index==0:
+                prev_probs = beam_probs_t[time_index]
+            else:
+                probabilities = beam_probs_t[time_index]
+                prev_probs = tf.expand_dims(prev_probs, axis=2)
+                probabilities = tf.expand_dims(probabilities, axis=1)
+                probs_candidates = tf.reshape(tf.multiply(prev_probs, probabilities), [-1, config.crf_beamsize * config.crf_beamsize])
+                prev_probs, _ = tf.nn.top_k(probs_candidates, k=config.crf_beamsize, sorted=True)
+
+        return tf.reduce_sum(prev_probs, axis=1)
 
     def greedy_decoding(self, H, config):
 
