@@ -22,6 +22,7 @@ class Configuration(object):
     early_stopping = 3
     random_seed = 11
     crf_beamsize = 17
+    
     """inference type"""
     #inference = "softmax"
     #inference = "crf"

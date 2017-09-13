@@ -726,26 +726,21 @@ class NER(object):
         probs = tf.exp(preds)
         beam_probs, _ = tf.nn.top_k(probs, k=config.crf_beamsize, sorted=True)
         beam_probs_t = tf.transpose(beam_probs, [1,0,2])
+        Z_masked = self.simple_beam_search(beam_probs_t, config)
 
-        Z = []
+
         True_Score = []
-
+        sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
         for time_index in range(config.max_sentence_length):
-	     sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
-	     sequence_l = sequence_l + time_index + 1
-	     true_score = tf.contrib.crf.crf_unary_score(
+            sequence_l = sequence_l + 1
+            true_score = tf.contrib.crf.crf_unary_score(
                                 tag_indices=self.tag_placeholder,
                                 sequence_lengths=sequence_l,
                                 inputs=preds
                                 )
              True_Score.append(true_score)
 
-             z = self.simple_beam_search(beam_probs_t, config, time_index)
-             Z.append(tf.log(z))
-
-        Z = tf.stack(Z, axis=1)
         True_Score = tf.stack(True_Score, axis=1)
-        Z_masked = tf.multiply(Z, self.word_mask_placeholder)
         True_Score_masked = tf.multiply(True_Score, self.word_mask_placeholder)
         beam_crf_log_likelihood = True_Score_masked - Z_masked
         beam_crf_loss = tf.reduce_mean(tf.reduce_mean(-beam_crf_log_likelihood, axis=1), axis=0)
@@ -757,8 +752,9 @@ class NER(object):
         prev_output = tf.matmul(coefficient, tag_lookup_table)
         return prev_output
 
-    def simple_beam_search(self, beam_probs_t, config, j):
-        for time_index in range(j+1):
+    def simple_beam_search(self, beam_probs_t, config):
+        Z = []
+        for time_index in range(config.max_sentence_length):
             if time_index==0:
                 prev_probs = beam_probs_t[time_index]
             else:
@@ -767,8 +763,12 @@ class NER(object):
                 probabilities = tf.expand_dims(probabilities, axis=1)
                 probs_candidates = tf.reshape(tf.multiply(prev_probs, probabilities), [-1, config.crf_beamsize * config.crf_beamsize])
                 prev_probs, _ = tf.nn.top_k(probs_candidates, k=config.crf_beamsize, sorted=True)
+            z = tf.reduce_sum(prev_probs, axis=1)
+            Z.append(tf.log(z))
 
-        return tf.reduce_sum(prev_probs, axis=1)
+        Z = tf.stack(Z, axis=1)
+        Z_masked = tf.multiply(Z, self.word_mask_placeholder)
+        return Z_masked
 
     def greedy_decoding(self, H, config):
 
