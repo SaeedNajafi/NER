@@ -490,5 +490,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  run_NER()
-  #test_NER()
+  #run_NER()
+  test_NER()
