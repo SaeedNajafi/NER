@@ -701,14 +701,17 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 preds.append(pred)
-
+                #prev_output = self.soft_argmax(pred, tag_lookup_table)
+                prev_output = tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
                 ## flip a coin and select the true previous tag or the generated one.
-                def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
+                #def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
                 #def opt(): return tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(predictions, axis=1))
-                def opt2(): return self.soft_argmax(pred, tag_lookup_table)
-                prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
+                #def opt2(): return self.soft_argmax(pred, tag_lookup_table)
+                #prev_output = tf.cond(tf.less(self.flip_coin_placeholder, self.flip_prob_placeholder), opt1, opt2)
 
         preds = tf.stack(preds, axis=1)
+
+        '''
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=preds,
                                     targets=self.tag_placeholder,
@@ -716,8 +719,34 @@ class NER(object):
                                     average_across_timesteps=True,
                                     average_across_batch=True
                                     )
+        '''
 
+        preds = preds - tf.expand_dims(tf.reduce_max(preds, axis=2), axis=2)
+        preds = tf.multiply(preds, tf.expand_dims(self.word_mask_placeholder, -1))
+        probs = tf.exp(preds)
+        beam_probs, _ = tf.nn.top_k(probs, k=config.crf_beamsize, sorted=True)
+        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
 
+        Z = []
+        True_Score = []
+
+        for time_index in range(config.max_sentence_length):
+             z = self.simple_beam_search(beam_probs_t, config, time_index)
+             Z.append(tf.log(z))
+             true_score = tf.contrib.crf.crf_unary_score(
+                                tag_indices=self.tag_placeholder,
+                                sequence_lengths=tf.constant(time_index+1, shape=(b_size,), dtype=tf.float32)
+                                inputs=preds
+                                )
+            True_Score.append(true_score)
+
+        Z = tf.stack(Z, axis=1)
+        True_Score = tf.stack(True_Score, axis=1)
+        Z_masked = tf.multiply(Z, self.word_mask_placeholder)
+        True_Score_masked = tf.multiply(True_Score, self.word_mask_placeholder)
+        beam_crf_log_likelihood = True_Score_masked - Z_masked
+        beam_crf_loss = tf.reduce_mean(tf.reduce_mean(-beam_crf_log_likelihood, axis=1), axis=0)
+        self.loss = beam_crf_loss
         return self.loss
 
     def soft_argmax(self, pred, tag_lookup_table):
@@ -725,11 +754,8 @@ class NER(object):
         prev_output = tf.matmul(coefficient, tag_lookup_table)
         return prev_output
 
-    def simple_beam_search(self, probs, config):
-        b_size = tf.shape(probs)[0]
-        beam_probs, _ = tf.nn.top_k(tf.exp(probs), k=config.crf_beamsize, sorted=True)
-        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
-        for time_index in range(config.max_sentence_length):
+    def simple_beam_search(self, beam_probs_t, config, j):
+        for time_index in range(j):
             if time_index==0:
                 prev_probs = beam_probs_t[time_index]
             else:
