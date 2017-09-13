@@ -731,14 +731,17 @@ class NER(object):
         True_Score = []
 
         for time_index in range(config.max_sentence_length):
-             z = self.simple_beam_search(beam_probs_t, config, time_index)
-             Z.append(tf.log(z))
-             true_score = tf.contrib.crf.crf_unary_score(
+	     sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
+	     sequence_l = sequence_l + time_index + 1
+	     true_score = tf.contrib.crf.crf_unary_score(
                                 tag_indices=self.tag_placeholder,
-                                sequence_lengths=tf.constant(time_index+1, shape=(b_size,), dtype=tf.float32)
+                                sequence_lengths=sequence_l,
                                 inputs=preds
                                 )
-            True_Score.append(true_score)
+             True_Score.append(true_score)
+
+             z = self.simple_beam_search(beam_probs_t, config, time_index)
+             Z.append(tf.log(z))
 
         Z = tf.stack(Z, axis=1)
         True_Score = tf.stack(True_Score, axis=1)
@@ -755,7 +758,7 @@ class NER(object):
         return prev_output
 
     def simple_beam_search(self, beam_probs_t, config, j):
-        for time_index in range(j):
+        for time_index in range(j+1):
             if time_index==0:
                 prev_probs = beam_probs_t[time_index]
             else:

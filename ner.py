@@ -274,6 +274,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         alpha = 1
+        k = 15
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -281,7 +282,7 @@ def run_NER():
             start = time.time()
             ###
             alpha = np.minimum(alpha * 1.8, 1000000)
-            #flip_prob = np.divide( k, k + np.exp( np.divide(epoch, k) ) )
+            flip_prob = np.divide( k, k + np.exp( np.divide(epoch, k) ) )
             #manually reseting adam optimizer
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
@@ -489,5 +490,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  #run_NER()
-  test_NER()
+  run_NER()
+  #test_NER()
