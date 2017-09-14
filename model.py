@@ -734,7 +734,7 @@ class NER(object):
                 if (time_index < config.max_sentence_length - 1):
                     reward = tf.multiply(reward, not_in_beam)
 
-                Objective.append(tf.log(pie) * (reward - average_reward))
+                Objective.append(tf.multiply(tf.log(pie), tf.expand_dims(reward - average_reward, axis=1)))
                 average_reward = average_reward + tf.divide((reward - average_reward), tf.cast(sequence_l, tf.float32))
 
                 prefer = tf.tanh(tf.add(tf.matmul(pred, actor_C), actor_B))
@@ -788,7 +788,7 @@ class NER(object):
                 prev_output, _ = self.soft_argmax(prefer, tag_lookup_table)
 
             Preds = tf.stack(Preds, axis=1)
-        self.output = self.simple_beam_search(Preds, config)
+        self.outputs = self.simple_beam_search(Preds, config)
         return
 
     def simple_beam_search(self, Preds, config):
@@ -824,6 +824,7 @@ class NER(object):
                 indices = beam_index_t[time_index]
                 indices_t = tf.transpose(indices, [1,0])
                 beam_t = tf.transpose(beam, [1,0,2])
+		beam_candidates = []
                 for b in range(config.beamsize):
                     for bb in range(config.beamsize):
                         beam_candidates.append(tf.concat(
