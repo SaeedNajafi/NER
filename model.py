@@ -692,7 +692,7 @@ class NER(object):
             true_score = tf.cast(sequence_l, tf.float32) + 0.0
             Objective = []
             average_reward = tf.cast(sequence_l, tf.float32) + 0.0
-            pie = tf.expand_dims(tf.cast(sequence_l, tf.float32), axis=1)) + tf.constant(1.0, dtype=tf.float32, shape(1,config.tag_size))
+            pie = tf.expand_dims(tf.cast(sequence_l, tf.float32), axis=1) + tf.constant(1.0, dtype=tf.float32, shape(1,config.tag_size))
             pie = tf.divide(pie, config.tag_size)
 
             for time_index in range(config.max_sentence_length):
