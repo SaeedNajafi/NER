@@ -692,8 +692,8 @@ class NER(object):
             true_score = tf.cast(sequence_l, tf.float32) + 0.0
             Objective = []
             average_reward = tf.cast(sequence_l, tf.float32) + 0.0
-            pie = tf.cast(sequence_l, tf.float32) + 1.0
-            pie = tf.divide(pie, self.tag_size)
+            pie = tf.expand_dims(tf.cast(sequence_l, tf.float32), axis=1)) + tf.constant(1.0, dtype=tf.float32, shape(1,config.tag_size))
+            pie = tf.divide(pie, config.tag_size)
 
             for time_index in range(config.max_sentence_length):
                 sequence_l = sequence_l + 1
@@ -718,31 +718,31 @@ class NER(object):
                     prob_candidates = tf.reshape(tf.multiply(prev_prob, probability), [-1, config.beamsize * config.beamsize])
                     prev_prob, _ = tf.nn.top_k(prob_candidates, k=config.beamsize, sorted=True)
 
-                true_score += tf.contrib.crf.crf_unary_score(
-                                        tag_indices=tag_t[time_index],
-                                        sequence_lengths=l,
-                                        inputs=pred_norm
-                                    )
+                flattened_inputs = tf.reshape(pred_norm, [-1])
+		offsets = tf.range(b_size) * config.tag_size
+		tag_indices = offsets + tag_t[time_index]
+		unary_score = tf.gather(flattened_inputs, tag_indices)
+		true_score += unary_score
 
                 diff = tf.abs(prev_prob - tf.expand_dims(tf.exp(true_score), axis=1))
                 not_in_beam = tf.greater(diff, 1e-8)
                 not_in_beam = tf.cast(not_in_beam, tf.float32)
                 not_in_beam = tf.reduce_prod(not_in_beam, axis=1)
-                z = tf.reduce_sum(tf.concat([prev_prob, tf.exp(true_score)], axis=1), axis=1)
+                z = tf.reduce_sum(tf.concat([prev_prob, tf.expand_dims(tf.exp(true_score), axis=1)], axis=1), axis=1)
                 reward = true_score - tf.log(z)
 
                 if (time_index < config.max_sentence_length - 1):
                     reward = tf.multiply(reward, not_in_beam)
 
                 Objective.append(tf.log(pie) * (reward - average_reward))
-                average_reward = average_reward + tf.divide((reward - average_reward), sequence_l)
+                average_reward = average_reward + tf.divide((reward - average_reward), tf.cast(sequence_l, tf.float32))
 
                 prefer = tf.tanh(tf.add(tf.matmul(pred, actor_C), actor_B))
                 prev_output, pie = self.soft_argmax(prefer, tag_lookup_table)
 
             Objective = tf.stack(Objective, axis=1)
-            Objective = tf.multiply(Objective, self.word_mask_placeholder)
-            self.loss = -tf.reduce_mean(tf.reduce_mean(Objective, axis=1), axis=0)
+            Objective = tf.multiply(Objective, tf.expand_dims(self.word_mask_placeholder, axis=-1))
+            self.loss = -tf.reduce_mean(tf.reduce_mean(tf.reduce_mean(Objective, axis=2), axis=1), axis=0)
 
         return self.loss
 
