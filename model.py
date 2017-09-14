@@ -659,10 +659,9 @@ class NER(object):
                                     )
 
             actor_B = tf.get_variable(
-                                    name = "actor_B",
-                                    shape = (config.tag_size,),
-                                    dtype= tf.float32,
-                                    trainable= True,
+                                    "actor_B",
+				    (config.tag_size,),
+                            	    tf.float32,
                                     tf.constant_initializer(0.0)
                                     )
 
@@ -690,10 +689,10 @@ class NER(object):
 
             sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
             l = sequence_l + 1
-            true_score = sequence_l + 0.0
+            true_score = tf.cast(sequence_l, tf.float32) + 0.0
             Objective = []
-            average_reward = sequence_l + 0.0
-            pie = sequence_l + 1.0
+            average_reward = tf.cast(sequence_l, tf.float32) + 0.0
+            pie = tf.cast(sequence_l, tf.float32) + 1.0
             pie = tf.divide(pie, self.tag_size)
 
             for time_index in range(config.max_sentence_length):
