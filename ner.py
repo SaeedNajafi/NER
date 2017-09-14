@@ -14,9 +14,6 @@ import utils as ut
 def run_epoch(
             config,
             model,
-            flip_prob,
-            epoch,
-            alpha,
             session,
             char_X,
             word_length_X,
@@ -52,9 +49,6 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
-        t = time.clock()
-        np.random.seed(step + epoch + int(t))
-        flip_coin = np.random.uniform(low=0.0, high=1.0)
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -63,9 +57,6 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
-                    flip_prob_batch=flip_prob,
-                    flip_coin_batch=flip_coin,
-                    alpha_batch=alpha,
                     tag_batch=tag_data
                 )
 
@@ -148,9 +139,6 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
-                    flip_prob_batch=1.0,
-                    flip_coin_batch=0.0,
-                    alpha_batch=1000000,
                     tag_batch=tag_data
                 )
 
@@ -206,7 +194,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="scheduled_decoder_rnn":
+        elif config.inference=="decoder_rnn" or config.inference=="actor_decoder_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -273,27 +261,22 @@ def run_NER():
 
         session.run(init)
         first_start = time.time()
-        alpha = 1
-        k = 15
+
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
 
             start = time.time()
             ###
-            alpha = np.minimum(alpha * 1.8, 1000000)
-            flip_prob = np.divide( k, k + np.exp( np.divide(epoch, k) ) )
+
             #manually reseting adam optimizer
-            if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40):
+            if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
             train_loss = run_epoch(
                                     config,
                                     model,
-                                    flip_prob,
-                                    epoch,
-                                    alpha,
                                     session,
                                     data['train_data']['char_X'],
                                     data['train_data']['word_length_X'],
