@@ -692,7 +692,7 @@ class NER(object):
             true_score = tf.cast(sequence_l, tf.float32) + 0.0
             Objective = []
             average_reward = tf.cast(sequence_l, tf.float32) + 0.0
-            pie = tf.expand_dims(tf.cast(sequence_l, tf.float32), axis=1) + tf.constant(1.0, dtype=tf.float32, shape(1,config.tag_size))
+            pie = tf.expand_dims(tf.cast(sequence_l, tf.float32), axis=1) + tf.constant(1.0, dtype=tf.float32, shape=(1,config.tag_size))
             pie = tf.divide(pie, config.tag_size)
 
             for time_index in range(config.max_sentence_length):
@@ -719,10 +719,10 @@ class NER(object):
                     prev_prob, _ = tf.nn.top_k(prob_candidates, k=config.beamsize, sorted=True)
 
                 flattened_inputs = tf.reshape(pred_norm, [-1])
-		offsets = tf.range(b_size) * config.tag_size
-		tag_indices = offsets + tag_t[time_index]
-		unary_score = tf.gather(flattened_inputs, tag_indices)
-		true_score += unary_score
+                offsets = tf.range(b_size) * config.tag_size
+                tag_indices = offsets + tag_t[time_index]
+                unary_score = tf.gather(flattened_inputs, tag_indices)
+                true_score += unary_score
 
                 diff = tf.abs(prev_prob - tf.expand_dims(tf.exp(true_score), axis=1))
                 not_in_beam = tf.greater(diff, 1e-8)
