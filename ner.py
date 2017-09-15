@@ -262,6 +262,9 @@ def run_NER():
         session.run(init)
         first_start = time.time()
 
+        if(config.inference=="actor_decoder_rnn"):
+            saver.restore(session, './weights/ner.weights')
+
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -332,8 +335,7 @@ def run_NER():
             print 'Epoch training time: {} seconds'.format(time.time() - start)
 
         print 'Total training time: {} seconds'.format(time.time() - first_start)
-
-
+        
         saver.restore(session, './weights/ner.weights')
         print
         print

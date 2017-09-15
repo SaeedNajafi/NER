@@ -824,7 +824,7 @@ class NER(object):
                 indices = beam_index_t[time_index]
                 indices_t = tf.transpose(indices, [1,0])
                 beam_t = tf.transpose(beam, [1,0,2])
-		beam_candidates = []
+                beam_candidates = []
                 for b in range(config.beamsize):
                     for bb in range(config.beamsize):
                         beam_candidates.append(tf.concat(
