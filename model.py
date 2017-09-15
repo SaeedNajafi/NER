@@ -31,9 +31,9 @@ class NER(object):
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
-        elif config.inference=="actor_decoder_rnn":
-            loss = self.train_by_actor_decoder_rnn(H, config)
-            self.actor_decoding(H, config)
+        elif config.inference=="attention_decoder_rnn":
+            loss = self.train_by_attention_decoder_rnn(H, config)
+            self.attention_decoding(H, config)
 
         self.train_op = self.add_training_op(loss, config)
         return
@@ -616,7 +616,7 @@ class NER(object):
 
         return self.loss
 
-    def train_by_actor_decoder_rnn(self, H, config):
+    def train_by_attention_decoder_rnn(self, H, config):
 
         """
         Apply an actor_decoder_rnn layer in the training step.
@@ -649,18 +649,18 @@ class NER(object):
                             tf.constant_initializer(0.0)
                             )
 
-        with tf.variable_scope("actor"):
-            actor_C = tf.get_variable(
-                                    name = "actor_C",
+        with tf.variable_scope("attention"):
+            U_attention = tf.get_variable(
+                                    name = "U_attention",
                                     shape = (config.tag_size, config.tag_size),
                                     dtype= tf.float32,
                                     trainable= True,
                                     initializer = self.xavier_initializer
                                     )
 
-            actor_B = tf.get_variable(
-                                    "actor_B",
-				    (config.tag_size,),
+            b_attention = tf.get_variable(
+                                    "b_attention",
+                                    (config.tag_size,),
                             	    tf.float32,
                                     tf.constant_initializer(0.0)
                                     )
@@ -686,14 +686,9 @@ class NER(object):
                                         )
 
             initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-
             sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
-            l = sequence_l + 1
             true_score = tf.cast(sequence_l, tf.float32) + 0.0
             Objective = []
-            average_reward = tf.cast(sequence_l, tf.float32) + 0.0
-            pie = tf.expand_dims(tf.cast(sequence_l, tf.float32), axis=1) + tf.constant(1.0, dtype=tf.float32, shape=(1,config.tag_size))
-            pie = tf.divide(pie, config.tag_size)
 
             for time_index in range(config.max_sentence_length):
                 sequence_l = sequence_l + 1
@@ -708,7 +703,7 @@ class NER(object):
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 pred_norm = pred - tf.expand_dims(tf.reduce_max(pred, axis=1), axis=1)
                 prob = tf.exp(pred_norm)
-                beam_prob, beam_index = tf.nn.top_k(prob, k=config.beamsize, sorted=True)
+                beam_prob, _ = tf.nn.top_k(prob, k=config.beamsize, sorted=True)
                 if (time_index==0):
                     prev_prob = beam_prob
                 else:
@@ -729,29 +724,28 @@ class NER(object):
                 not_in_beam = tf.cast(not_in_beam, tf.float32)
                 not_in_beam = tf.reduce_prod(not_in_beam, axis=1)
                 z = tf.reduce_sum(tf.concat([prev_prob, tf.expand_dims(tf.exp(true_score), axis=1)], axis=1), axis=1)
-                reward = true_score - tf.log(z)
+                log_likelihood = true_score - tf.log(z)
 
                 if (time_index < config.max_sentence_length - 1):
                     reward = tf.multiply(reward, not_in_beam)
 
-                Objective.append(tf.multiply(tf.log(pie), tf.expand_dims(reward - average_reward, axis=1)))
-                average_reward = average_reward + tf.divide((reward - average_reward), tf.cast(sequence_l, tf.float32))
+                Objective.append(log_likelihood)
 
-                prefer = tf.tanh(tf.add(tf.matmul(pred, actor_C), actor_B))
-                prev_output, pie = self.soft_argmax(prefer, tag_lookup_table)
+                attention = tf.tanh(tf.add(tf.matmul(pred, U_attention), b_attention))
+                prev_output = self.soft_argmax(attention, tag_lookup_table)
 
             Objective = tf.stack(Objective, axis=1)
-            Objective = tf.multiply(Objective, tf.expand_dims(self.word_mask_placeholder, axis=-1))
-            self.loss = -tf.reduce_mean(tf.reduce_mean(tf.reduce_mean(Objective, axis=2), axis=1), axis=0)
+            Objective = tf.multiply(Objective, self.word_mask_placeholder)
+            self.loss = -tf.reduce_mean(tf.reduce_mean(Objective, axis=1), axis=0)
 
         return self.loss
 
-    def soft_argmax(self, prefer, tag_lookup_table):
-        pie = tf.nn.softmax(prefer)
-        prev_output = tf.matmul(pie, tag_lookup_table)
-        return prev_output, pie
+    def soft_argmax(self, attention, tag_lookup_table):
+        coefficient = tf.nn.softmax(attention)
+        prev_output = tf.matmul(coefficient, tag_lookup_table)
+        return prev_output
 
-    def actor_decoding(self, H, config):
+    def attention_decoding(self, H, config):
 
         #batch size
         b_size = tf.shape(H)[0]
@@ -765,9 +759,9 @@ class NER(object):
         with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable("tag_lookup_table")
 
-        with tf.variable_scope("actor", reuse=True):
-            actor_C = tf.get_variable("actor_C")
-            actor_B = tf.get_variable("actor_B")
+        with tf.variable_scope("attention", reuse=True):
+            U_attention = tf.get_variable("U_attention")
+            b_attention = tf.get_variable("b_attention")
 
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
@@ -784,8 +778,8 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 Preds.append(pred)
-                prefer = tf.tanh(tf.add(tf.matmul(pred, actor_C), actor_B))
-                prev_output, _ = self.soft_argmax(prefer, tag_lookup_table)
+                attention = tf.tanh(tf.add(tf.matmul(pred, U_attention), b_attention))
+                prev_output = self.soft_argmax(attention, tag_lookup_table)
 
             Preds = tf.stack(Preds, axis=1)
         self.outputs = self.simple_beam_search(Preds, config)
@@ -844,7 +838,7 @@ class NER(object):
         beam_t = tf.transpose(beam, [1,0,2])
 
         return beam_t[0]
-
+    
     def greedy_decoding(self, H, config):
 
         #batch size
