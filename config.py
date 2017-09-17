@@ -33,6 +33,7 @@ class Configuration(object):
     decoding="greedy"
     #decoding="beamsearch"
     beamsize = 17
+    decode_beam = 4
 
     """path to different files"""
     word_dic_path = './en_data/glove_en_word_100_dic.txt'
