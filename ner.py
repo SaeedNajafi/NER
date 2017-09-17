@@ -14,6 +14,7 @@ import utils as ut
 def run_epoch(
             config,
             model,
+            pretrain,
             session,
             char_X,
             word_length_X,
@@ -57,6 +58,7 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
+                    pretrain = pretrain,
                     tag_batch=tag_data
                 )
 
@@ -139,6 +141,7 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
+                    pretrain = False,
                     tag_batch=tag_data
                 )
 
@@ -194,7 +197,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="attention_decoder_rnn":
+        elif config.inference=="decoder_rnn" or config.inference=="attention_decoder_rnn" or config.inference=="approximate_beam":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -261,7 +264,7 @@ def run_NER():
 
         session.run(init)
         first_start = time.time()
-
+        pretrain = True
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -277,6 +280,7 @@ def run_NER():
             train_loss = run_epoch(
                                     config,
                                     model,
+                                    pretrain,
                                     session,
                                     data['train_data']['char_X'],
                                     data['train_data']['word_length_X'],
@@ -323,6 +327,9 @@ def run_NER():
                 if not os.path.exists("./weights"):
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
+
+            if(epoch>=5):
+                pretrain = False
 
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
