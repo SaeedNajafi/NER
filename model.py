@@ -822,7 +822,6 @@ class NER(object):
                 prev_output = tf.cond(self.pretrain_placeholder, opt1, opt2)
 
             Preds = tf.stack(Preds, axis=1)
-            Preds = Preds - tf.expand_dims(tf.reduce_max(Preds, axis=2), axis=2)
 
             True_Score = []
             sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
@@ -839,8 +838,7 @@ class NER(object):
 
             Not_in_beam = []
             Z = []
-            probs = tf.exp(Preds)
-            beam_probs, _ = tf.nn.top_k(probs, k=config.beamsize, sorted=True)
+            beam_probs, _ = tf.nn.top_k(Preds, k=config.beamsize, sorted=True)
             beam_probs_t = tf.transpose(beam_probs, [1,0,2])
             for time_index in range(config.max_sentence_length):
                 if (time_index==0):
@@ -849,31 +847,29 @@ class NER(object):
                     probabilities = beam_probs_t[time_index]
                     prev_probs = tf.expand_dims(prev_probs, axis=2)
                     probabilities = tf.expand_dims(probabilities, axis=1)
-                    prob_candidates = tf.reshape(tf.multiply(prev_probs, probabilities), [-1, config.beamsize * config.beamsize])
+                    prob_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.beamsize * config.beamsize])
                     prev_probs, _ = tf.nn.top_k(prob_candidates, k=config.beamsize, sorted=True)
 
-                diff = tf.abs(prev_probs - tf.expand_dims(tf.exp(True_Score[time_index]), axis=1))
-                not_in_beam = tf.greater(diff, 1e-8)
+                diff = tf.abs(prev_probs - tf.expand_dims(True_Score[time_index], axis=1))
+                not_in_beam = tf.greater(diff,1e-8)
                 not_in_beam = tf.cast(not_in_beam, tf.float32)
                 not_in_beam = tf.reduce_prod(not_in_beam, axis=1)
                 Not_in_beam.append(not_in_beam)
-                z = tf.reduce_sum(prev_probs, axis=1)
+                z = prev_probs
                 Z.append(z)
 
             Not_in_beam = tf.stack(Not_in_beam, axis=1)
             Z = tf.stack(Z, axis=1)
             True_Score = tf.stack(True_Score, axis=1)
-            
-            temp = tf.one_hot(self.self.sentence_length_placeholder-1, config.max_sentence_length, on_value=1, off_value=0)
+            temp = tf.one_hot(self.sentence_length_placeholder-1, config.max_sentence_length, on_value=1.0, off_value=0.0)
             Not_in_beam = Not_in_beam + temp
-            Final_Z = Z + (2-Not_in_beam) * True_Score
-            Log_likelihood = True_Score - tf.log(Final_Z)
+	    Final_Z = tf.concat([Z, tf.expand_dims((2-Not_in_beam) * True_Score, axis=2)], axis=2)
+            Log_likelihood = True_Score - tf.reduce_logsumexp(Final_Z)
             Not_in_beam = tf.cast(tf.greater(Not_in_beam, 0), tf.float32)
             Log_likelihood = tf.multiply(Log_likelihood, Not_in_beam)
             Log_likelihood = tf.multiply(Log_likelihood, self.word_mask_placeholder)
 
             self.loss = -tf.reduce_mean(tf.reduce_mean(Log_likelihood, axis=1), axis=0)
-
         return self.loss
 
     def soft_argmax(self, pred, tag_lookup_table):
