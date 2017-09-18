@@ -35,10 +35,6 @@ class NER(object):
             loss = self.train_by_approximate_beam(H, config)
 	    self.beam_approximate_decoding(H, config)
 
-        elif config.inference=="attention_decoder_rnn":
-            loss = self.train_by_attention_decoder_rnn(H, config)
-            self.attention_decoding(H, config)
-
         self.train_op = self.add_training_op(loss, config)
         return
 
@@ -88,6 +84,7 @@ class NER(object):
                                     )
 
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
 
         self.pretrain_placeholder = tf.placeholder(dtype=tf.bool, shape=())
 
@@ -624,130 +621,6 @@ class NER(object):
 
         return self.loss
 
-    def train_by_attention_decoder_rnn(self, H, config):
-
-        """
-        Apply an actor_decoder_rnn layer in the training step.
-        Defines the loss during training.
-        """
-
-        #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer"):
-            tag_lookup_table = tf.get_variable(
-                                    name = "tag_lookup_table",
-                                    shape = (config.tag_size, config.tag_embedding_size),
-                                    dtype= tf.float32,
-                                    trainable= True,
-                                    initializer = self.xavier_initializer
-                                    )
-
-        """softmax prediction layer"""
-        with tf.variable_scope("softmax"):
-            U_softmax = tf.get_variable(
-                            "U_softmax",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b_softmax = tf.get_variable(
-                            "b_softmax",
-                            (config.tag_size,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-        with tf.variable_scope("attention"):
-            U_attention = tf.get_variable(
-                                    name = "U_attention",
-                                    shape = (config.tag_size, config.tag_size),
-                                    dtype= tf.float32,
-                                    trainable= True,
-                                    initializer = self.xavier_initializer
-                                    )
-
-            b_attention = tf.get_variable(
-                                    "b_attention",
-                                    (config.tag_size,),
-                            	    tf.float32,
-                                    tf.constant_initializer(0.0)
-                                    )
-
-        b_size = tf.shape(H)[0]
-        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        tag_t = tf.transpose(self.tag_placeholder, [1,0])
-        H_t = tf.transpose(H, [1,0,2])
-
-        with tf.variable_scope('decoder_rnn', reuse=None) as scope:
-            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
-                                        num_units=config.decoder_rnn_hidden_units,
-                                        use_peepholes=False,
-                                        cell_clip=None,
-                                        initializer=self.xavier_initializer,
-                                        num_proj=None,
-                                        proj_clip=None,
-                                        num_unit_shards=None,
-                                        num_proj_shards=None,
-                                        forget_bias=1.0,
-                                        state_is_tuple=True,
-                                        activation=tf.tanh
-                                        )
-
-            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-            sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
-            true_score = tf.cast(sequence_l, tf.float32) + 0.0
-            Objective = []
-
-            for time_index in range(config.max_sentence_length):
-                sequence_l = sequence_l + 1
-                if time_index==0:
-                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
-                else:
-                    scope.reuse_variables()
-                    output, state = self.decoder_lstm_cell(prev_output, state)
-
-                output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-                H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
-                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-                pred_norm = pred - tf.expand_dims(tf.reduce_max(pred, axis=1), axis=1)
-                prob = tf.exp(pred_norm)
-                beam_prob, _ = tf.nn.top_k(prob, k=config.beamsize, sorted=True)
-                if (time_index==0):
-                    prev_prob = beam_prob
-                else:
-                    probability = beam_prob
-                    prev_prob = tf.expand_dims(prev_prob, axis=2)
-                    probability = tf.expand_dims(probability, axis=1)
-                    prob_candidates = tf.reshape(tf.multiply(prev_prob, probability), [-1, config.beamsize * config.beamsize])
-                    prev_prob, _ = tf.nn.top_k(prob_candidates, k=config.beamsize, sorted=True)
-
-                flattened_inputs = tf.reshape(pred_norm, [-1])
-                offsets = tf.range(b_size) * config.tag_size
-                tag_indices = offsets + tag_t[time_index]
-                unary_score = tf.gather(flattened_inputs, tag_indices)
-                true_score += unary_score
-
-                diff = tf.abs(prev_prob - tf.expand_dims(tf.exp(true_score), axis=1))
-                not_in_beam = tf.greater(diff, 1e-8)
-                not_in_beam = tf.cast(not_in_beam, tf.float32)
-                not_in_beam = tf.reduce_prod(not_in_beam, axis=1)
-                z = tf.reduce_sum(tf.concat([prev_prob, tf.expand_dims(tf.exp(true_score), axis=1)], axis=1), axis=1)
-                log_likelihood = true_score - tf.log(z)
-
-                if (time_index < config.max_sentence_length - 1):
-                    reward = tf.multiply(reward, not_in_beam)
-
-                Objective.append(log_likelihood)
-
-                attention = tf.tanh(tf.add(tf.matmul(pred, U_attention), b_attention))
-                prev_output = self.soft_argmax(attention, tag_lookup_table)
-
-            Objective = tf.stack(Objective, axis=1)
-            Objective = tf.multiply(Objective, self.word_mask_placeholder)
-            self.loss = -tf.reduce_mean(tf.reduce_mean(Objective, axis=1), axis=0)
-
-        return self.loss
-
     def train_by_approximate_beam(self, H, config):
         """
         Apply an approximate_beam layer in the training step.
@@ -846,7 +719,7 @@ class NER(object):
                     prev_probs, _ = tf.nn.top_k(prob_candidates, k=config.beamsize, sorted=True)
 
                 diff = tf.abs(prev_probs - tf.expand_dims(True_Score[time_index], axis=1))
-                not_in_beam = tf.greater(diff,1e-8)
+                not_in_beam = tf.greater(diff, 1e-8)
                 not_in_beam = tf.cast(not_in_beam, tf.float32)
                 not_in_beam = tf.reduce_prod(not_in_beam, axis=1)
                 Not_in_beam.append(not_in_beam)
@@ -856,14 +729,9 @@ class NER(object):
             Not_in_beam = tf.stack(Not_in_beam, axis=1)
             Z = tf.stack(Z, axis=1)
             True_Score = tf.stack(True_Score, axis=1)
-            temp = tf.one_hot(self.sentence_length_placeholder-1, config.max_sentence_length, on_value=1.0, off_value=0.0)
-            #Not_in_beam = Not_in_beam + temp
-	    Final_Z = tf.concat([Z, tf.expand_dims((Not_in_beam) * True_Score, axis=2)], axis=2)
+	    Final_Z = tf.concat([Z, tf.expand_dims(tf.stop_gradient(Not_in_beam) * True_Score, axis=2)], axis=2)
             Log_likelihood = True_Score - tf.reduce_logsumexp(Final_Z)
-            #Not_in_beam = tf.cast(tf.greater(Not_in_beam, 0), tf.float32)
-            #Log_likelihood = tf.multiply(Log_likelihood, Not_in_beam)
             Log_likelihood = tf.multiply(Log_likelihood, self.word_mask_placeholder)
-
             self.loss = -tf.reduce_mean(tf.reduce_mean(Log_likelihood, axis=1), axis=0)
         return self.loss
 
