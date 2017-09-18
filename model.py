@@ -732,7 +732,16 @@ class NER(object):
 	    Final_Z = tf.concat([Z, tf.expand_dims(tf.stop_gradient(Not_in_beam) * True_Score, axis=2)], axis=2)
             Log_likelihood = True_Score - tf.reduce_logsumexp(Final_Z)
             Log_likelihood = tf.multiply(Log_likelihood, self.word_mask_placeholder)
-            self.loss = -tf.reduce_mean(tf.reduce_mean(Log_likelihood, axis=1), axis=0)
+            beam_loss = -tf.reduce_mean(tf.reduce_mean(Log_likelihood, axis=1), axis=0)
+	    def opt1(): return tf.contrib.seq2seq.sequence_loss(
+                                    logits=Preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
+	    def opt2(): return beam_loss
+	    self.loss = tf.cond(self.pretrain_placeholder, opt1, opt2)
         return self.loss
 
     def soft_argmax(self, pred, tag_lookup_table):

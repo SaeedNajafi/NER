@@ -328,12 +328,9 @@ def run_NER():
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
 
-            if(epoch>=5):
-                pretrain = False
-
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
-                break
+                pretrain = False
                 ###
 
             print 'Epoch training time: {} seconds'.format(time.time() - start)
