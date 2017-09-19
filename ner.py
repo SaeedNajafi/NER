@@ -197,7 +197,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="attention_decoder_rnn" or config.inference=="approximate_beam":
+        elif config.inference=="decoder_rnn" or config.inference=="actor_decoder_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -330,7 +330,14 @@ def run_NER():
 
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
-                pretrain = False
+                if pretrain==True:
+                    pretrain=False
+                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                    session.run(tf.variables_initializer(optimizer_scope))
+                    continue
+                else:
+                    #early stopping
+                    break
                 ###
 
             print 'Epoch training time: {} seconds'.format(time.time() - start)
@@ -476,5 +483,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  #run_NER()
-  test_NER()
+  run_NER()
+  #test_NER()

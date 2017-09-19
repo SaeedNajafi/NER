@@ -31,9 +31,14 @@ class NER(object):
             elif config.decoding=="beamsearch":
                 self.beamsearch_decoding(H, config)
 
-        elif config.inference=="approximate_beam":
-            loss = self.train_by_approximate_beam(H, config)
-	    self.beam_approximate_decoding(H, config)
+        elif config.inference=="actor_decoder_rnn":
+            def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
+            def actor_beam_loss(): self.train_by_actor_decoder_rnn(H, config)
+            loss = tf.cond(self.pretrain, pretrain_loss, actor_beam_loss)
+
+            def pretrain_decoding(): return self.greedy_decoding(H, config)
+            def actor_decoding(): return self.actor_beam_decoding(H, config)
+	        tf.cond(self.pretrain, pretrain_decoding, actor_decoding)
 
         self.train_op = self.add_training_op(loss, config)
         return
@@ -621,14 +626,14 @@ class NER(object):
 
         return self.loss
 
-    def train_by_approximate_beam(self, H, config):
+    def train_by_actor_decoder_rnn(self, H, config):
         """
-        Apply an approximate_beam layer in the training step.
+        Apply an actor_beam layer in the training step.
         Defines the loss during training.
         """
 
         #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer"):
+        with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
                                     shape = (config.tag_size, config.tag_embedding_size),
@@ -638,7 +643,7 @@ class NER(object):
                                     )
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax"):
+        with tf.variable_scope("softmax", reuse=True):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
@@ -658,7 +663,8 @@ class NER(object):
         tag_t = tf.transpose(self.tag_placeholder, [1,0])
         H_t = tf.transpose(H, [1,0,2])
         Preds = []
-        with tf.variable_scope('decoder_rnn', reuse=None) as scope:
+        Policies = []
+        with tf.variable_scope('decoder_rnn', reuse=True) as scope:
             self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
@@ -684,12 +690,14 @@ class NER(object):
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+                policy = tf.nn.softmax(pred)
+                prev_output = tf.matmul(policy, tag_lookup_table)
+
                 Preds.append(pred)
-                def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index])
-                def opt2(): return self.soft_argmax(pred, tag_lookup_table)
-                prev_output = tf.cond(self.pretrain_placeholder, opt1, opt2)
+                Policies.append(policy)
 
             Preds = tf.stack(Preds, axis=1)
+            Policies = tf.stack(Policies, axis=1)
 
             True_Score = []
             sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
@@ -703,10 +711,8 @@ class NER(object):
                 True_Score.append(true_score)
 
 
-
-            Not_in_beam = []
             Z = []
-            beam_probs, _ = tf.nn.top_k(Preds, k=config.beamsize, sorted=True)
+            beam_probs, _ = tf.nn.top_k(Preds, k=config.train_beam, sorted=True)
             beam_probs_t = tf.transpose(beam_probs, [1,0,2])
             for time_index in range(config.max_sentence_length):
                 if (time_index==0):
@@ -715,41 +721,46 @@ class NER(object):
                     probabilities = beam_probs_t[time_index]
                     prev_probs = tf.expand_dims(prev_probs, axis=2)
                     probabilities = tf.expand_dims(probabilities, axis=1)
-                    prob_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.beamsize * config.beamsize])
-                    prev_probs, _ = tf.nn.top_k(prob_candidates, k=config.beamsize, sorted=True)
+                    prob_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.train_beam * config.train_beam])
+                    prev_probs, _ = tf.nn.top_k(prob_candidates, k=config.train_beam, sorted=True)
 
-                diff = tf.abs(prev_probs - tf.expand_dims(True_Score[time_index], axis=1))
-                not_in_beam = tf.greater(diff, 1e-8)
-                not_in_beam = tf.cast(not_in_beam, tf.float32)
-                not_in_beam = tf.reduce_prod(not_in_beam, axis=1)
-                Not_in_beam.append(not_in_beam)
                 z = prev_probs
                 Z.append(z)
 
-            Not_in_beam = tf.stack(Not_in_beam, axis=1)
             Z = tf.stack(Z, axis=1)
             True_Score = tf.stack(True_Score, axis=1)
-	    Final_Z = tf.concat([Z, tf.expand_dims(tf.stop_gradient(Not_in_beam) * True_Score, axis=2)], axis=2)
-            Log_likelihood = True_Score - tf.reduce_logsumexp(Final_Z)
-            Log_likelihood = tf.multiply(Log_likelihood, self.word_mask_placeholder)
-            beam_loss = -tf.reduce_mean(tf.reduce_mean(Log_likelihood, axis=1), axis=0)
-	    def opt1(): return tf.contrib.seq2seq.sequence_loss(
-                                    logits=Preds,
-                                    targets=self.tag_placeholder,
-                                    weights=self.word_mask_placeholder,
-                                    average_across_timesteps=True,
-                                    average_across_batch=True
-                                    )
-	    def opt2(): return beam_loss
-	    self.loss = tf.cond(self.pretrain_placeholder, opt1, opt2)
+
+            Diff = tf.abs(Z - tf.expand_dims(True_Score, axis=2))
+            Not_in_beam = tf.greater(Diff, 1e-8)
+            Not_in_beam = tf.cast(Not_in_beam, tf.float32)
+            Not_in_beam = tf.reduce_prod(Not_in_beam, axis=2)
+
+            # zero means in beam. one means not in beam.
+            Final_Z = tf.concat([Z, tf.expand_dims(Not_in_beam * True_Score, axis=2)], axis=2)
+            Log_likelihoods = True_Score - tf.reduce_logsumexp(Final_Z)
+
+            # Log_likelihoods are negative.
+            Rewards = -Log_likelihoods
+
+            Rewards_t = tf.transpose(Rewards, [1,0])
+            Baselines = []
+            zeros = self.sentence_length_placeholder - self.sentence_length_placeholder
+            for time_index in range(config.max_sentence_length):
+                if (time_index==0):
+                    Baselines.append(zeros)
+                else:
+                    Baselines.append(Baselines[time_index-1] + (1.0/time_index) * (Rewards_t[time_index-1]-Baselines[time_index-1]))
+
+            Baselines = tf.stack(Baselines, axis=1)
+
+            Objective = tf.log(Policies) * tf.stop_gradient(tf.expand_dims(Rewards-Baselines, axis=2))
+            Objective_masked = tf.multiply(Objective, tf.expand_dims(self.word_mask_placeholder, axis=2))
+
+            loss = -tf.reduce_mean(Objective_masked)
+
         return self.loss
 
-    def soft_argmax(self, pred, tag_lookup_table):
-        coefficient = tf.nn.softmax(pred)
-        prev_output = tf.matmul(coefficient, tag_lookup_table)
-        return prev_output
-
-    def beam_approximate_decoding(self, H, config):
+    def actor_beam_decoding(self, H, config):
 
         #batch size
         b_size = tf.shape(H)[0]
@@ -779,7 +790,8 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 Preds.append(pred)
-                prev_output = self.soft_argmax(pred, tag_lookup_table)
+                policy = tf.nn.softmax(pred)
+                prev_output = tf.matmul(policy, tag_lookup_table)
 
             Preds = tf.stack(Preds, axis=1)
         self.outputs = self.simple_beam_search(Preds, config)
@@ -795,12 +807,12 @@ class NER(object):
 
         #beam index
         be_index = tf.constant(
-                                config.decode_beam * config.decode_beam,
+                                config.test_beam * config.test_beam,
                                 dtype=tf.int32,
-                                shape=(1, config.decode_beam)
+                                shape=(1, config.test_beam)
                                 )
 
-        beam_probs, beam_index = tf.nn.top_k(Preds, k=config.decode_beam, sorted=True)
+        beam_probs, beam_index = tf.nn.top_k(Preds, k=config.test_beam, sorted=True)
         beam_probs_t = tf.transpose(beam_probs, [1,0,2])
         beam_index_t = tf.transpose(beam_index, [1,0,2])
 
@@ -813,14 +825,14 @@ class NER(object):
                 probabilities = beam_probs_t[time_index]
                 prev_probs = tf.expand_dims(prev_probs, axis=2)
                 probabilities = tf.expand_dims(probabilities, axis=1)
-                probs_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.decode_beam * config.decode_beam])
-                prev_probs, max_indices = tf.nn.top_k(probs_candidates, k=config.decode_beam, sorted=True)
+                probs_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.test_beam * config.test_beam])
+                prev_probs, max_indices = tf.nn.top_k(probs_candidates, k=config.test_beam, sorted=True)
                 indices = beam_index_t[time_index]
                 indices_t = tf.transpose(indices, [1,0])
                 beam_t = tf.transpose(beam, [1,0,2])
                 beam_candidates = []
-                for b in range(config.decode_beam):
-                    for bb in range(config.decode_beam):
+                for b in range(config.test_beam):
+                    for bb in range(config.test_beam):
                         beam_candidates.append(tf.concat(
                                                 [beam_t[b],
                                                  tf.expand_dims(indices_t[bb], axis=1)

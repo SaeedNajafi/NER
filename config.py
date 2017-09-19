@@ -26,14 +26,13 @@ class Configuration(object):
     #inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
-    #inference = "attention_decoder_rnn"
-    inference = "approximate_beam"
+    inference = "actor_decoder_rnn"
 
     """for decoding"""
     decoding="greedy"
     #decoding="beamsearch"
-    beamsize = 17
-    decode_beam = 4
+    train_beam = 17
+    test_beam = 4
 
     """path to different files"""
     word_dic_path = './en_data/glove_en_word_100_dic.txt'
