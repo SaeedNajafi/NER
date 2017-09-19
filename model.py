@@ -34,11 +34,11 @@ class NER(object):
         elif config.inference=="actor_decoder_rnn":
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
             def actor_beam_loss(): self.train_by_actor_decoder_rnn(H, config)
-            loss = tf.cond(self.pretrain, pretrain_loss, actor_beam_loss)
+            loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_beam_loss)
 
             def pretrain_decoding(): return self.greedy_decoding(H, config)
             def actor_decoding(): return self.actor_beam_decoding(H, config)
-	        tf.cond(self.pretrain, pretrain_decoding, actor_decoding)
+	    tf.cond(self.pretrain_placeholder, pretrain_decoding, actor_decoding)
 
         self.train_op = self.add_training_op(loss, config)
         return
