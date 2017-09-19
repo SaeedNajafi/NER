@@ -38,7 +38,7 @@ class NER(object):
 
             def pretrain_decoding(): return self.greedy_decoding(H, config)
             def actor_decoding(): return self.actor_beam_decoding(H, config)
-	        tf.cond(self.pretrain, pretrain_decoding, actor_decoding)
+            tf.cond(self.pretrain, pretrain_decoding, actor_decoding)
 
         self.train_op = self.add_training_op(loss, config)
         return
