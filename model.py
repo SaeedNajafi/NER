@@ -33,12 +33,12 @@ class NER(object):
 
         elif config.inference=="actor_decoder_rnn":
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
-            def actor_beam_loss(): self.train_by_actor_decoder_rnn(H, config)
-            loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_beam_loss)
-
-            def pretrain_decoding(): return self.greedy_decoding(H, config)
-            def actor_decoding(): return self.actor_beam_decoding(H, config)
-	    tf.cond(self.pretrain_placeholder, pretrain_decoding, actor_decoding)
+            def actor_beam_loss(): return self.train_by_actor_decoder_rnn(H, config)
+            self.loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_beam_loss)
+	    loss = self.loss
+            def pretrain_decoding(): return tf.cast(self.greedy_decoding(H, config), tf.int64)
+            def actor_decoding(): return tf.cast(self.actor_beam_decoding(H, config), tf.int64)
+	    self.outputs = tf.cond(self.pretrain_placeholder, pretrain_decoding, actor_decoding)
 
         self.train_op = self.add_training_op(loss, config)
         return
@@ -745,18 +745,19 @@ class NER(object):
             Rewards_t = tf.transpose(Rewards, [1,0])
             Baselines = []
             zeros = self.sentence_length_placeholder - self.sentence_length_placeholder
+	    zeros = tf.cast(zeros, tf.float32)
             for time_index in range(config.max_sentence_length):
                 if (time_index==0):
                     Baselines.append(zeros)
                 else:
-                    Baselines.append(Baselines[time_index-1] + (1.0/time_index) * (Rewards_t[time_index-1]-Baselines[time_index-1]))
+                    Baselines.append(Baselines[time_index-1] + (1.0/tf.cast(time_index, tf.float32)) * (Rewards_t[time_index-1]-Baselines[time_index-1]))
 
             Baselines = tf.stack(Baselines, axis=1)
 
             Objective = tf.log(Policies) * tf.stop_gradient(tf.expand_dims(Rewards-Baselines, axis=2))
             Objective_masked = tf.multiply(Objective, tf.expand_dims(self.word_mask_placeholder, axis=2))
 
-            loss = -tf.reduce_mean(Objective_masked)
+            self.loss = -tf.reduce_mean(Objective_masked)
 
         return self.loss
 
@@ -795,7 +796,7 @@ class NER(object):
 
             Preds = tf.stack(Preds, axis=1)
         self.outputs = self.simple_beam_search(Preds, config)
-        return
+        return self.outputs
 
     def simple_beam_search(self, Preds, config):
 
@@ -887,7 +888,7 @@ class NER(object):
 
             self.outputs = tf.stack(outputs, axis=1)
 
-        return
+        return self.outputs
 
     def beamsearch_decoding(self, H, config):
 
@@ -1005,7 +1006,7 @@ class NER(object):
             beam_t = tf.transpose(beam, [1,0,2])
             self.outputs = beam_t[0]
 
-        return
+        return self.outputs
 
     def add_training_op(self, loss, config):
         """Sets up the training Ops.
