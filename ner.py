@@ -28,6 +28,7 @@ def run_epoch(
 
     # We're interested in keeping track of the loss during training
     total_loss = []
+    baseline_total_loss = []
     total_steps = int(np.ceil(len(word_X) / float(config.batch_size)))
     data = ut.data_iterator(
                 char_X,
@@ -62,8 +63,9 @@ def run_epoch(
                     tag_batch=tag_data
                 )
 
-        loss, _ = session.run([model.loss, model.train_op], feed_dict=feed)
+        baseline_loss, loss, _, _ = session.run([model.baseline_loss, model.loss, model.baseline_train_op, model.train_op], feed_dict=feed)
         total_loss.append(loss)
+        baseline_total_loss.append(baseline_loss)
 
         ##
         if verbose and step % verbose == 0:
@@ -73,13 +75,19 @@ def run_epoch(
                                                         np.mean(total_loss)
                                                         )
                             )
-
+            sys.stdout.write('\r\n')
+            sys.stdout.write('\r{} / {} : baseline loss = {}'.format(
+                                                        step,
+                                                        total_steps,
+                                                        np.mean(baseline_total_loss)
+                                                        )
+                            )
             sys.stdout.flush()
         if verbose:
             sys.stdout.write('\r')
             sys.stdout.flush()
 
-    return np.mean(total_loss)
+    return np.mean(total_loss), np.mean(baseline_total_loss)
 
 def predict(
         config,
@@ -276,20 +284,23 @@ def run_NER():
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
+                
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
 
-            train_loss = run_epoch(
-                                    config,
-                                    model,
-                                    pretrain,
-                                    session,
-                                    data['train_data']['char_X'],
-                                    data['train_data']['word_length_X'],
-                                    data['train_data']['cap_X'],
-                                    data['train_data']['word_X'],
-                                    data['train_data']['mask_X'],
-                                    data['train_data']['sentence_length_X'],
-                                    data['train_data']['Y']
-                                    )
+            train_loss, baseline_train_loss = run_epoch(
+                                                    config,
+                                                    model,
+                                                    pretrain,
+                                                    session,
+                                                    data['train_data']['char_X'],
+                                                    data['train_data']['word_length_X'],
+                                                    data['train_data']['cap_X'],
+                                                    data['train_data']['word_X'],
+                                                    data['train_data']['mask_X'],
+                                                    data['train_data']['sentence_length_X'],
+                                                    data['train_data']['Y']
+                                                    )
 
             _ , predictions = predict(
                                     config,
@@ -305,6 +316,7 @@ def run_NER():
                                     )
 
             print 'Training loss: {}'.format(train_loss)
+            print 'Baseline Training loss: {}'.format(baseline_train_loss)
             save_predictions(
                             config,
                             predictions,
@@ -333,6 +345,8 @@ def run_NER():
                 if pretrain==True:
                     pretrain=False
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                    session.run(tf.variables_initializer(optimizer_scope))
+                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
                     continue
                 else:
