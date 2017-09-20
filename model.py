@@ -35,7 +35,7 @@ class NER(object):
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
             def actor_beam_loss(): return self.train_by_actor_decoder_rnn(H, config)
             self.loss, self.baseline_loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_beam_loss)
-            
+
             #optimizer to learn the baseline estimates
             with tf.variable_scope("baseline_adam_optimizer"):
                 self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
@@ -691,7 +691,7 @@ class NER(object):
                         (-1, config.max_sentence_length)
                     )
 
-        self.baseline_loss = tf.reduce_mean(tf.pow(Baselines -Rewards, 2))
+        self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -Rewards, 2), self.word_mask_placeholder))
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=Preds,
                                     targets=self.tag_placeholder,
@@ -840,8 +840,11 @@ class NER(object):
 
             Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Rewards-Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
-
-            self.baseline_loss = tf.reduce_mean(tf.pow(Baselines -Rewards, 2))
+            Baselines = tf.reshape(
+                            Baselines,
+                            (-1, config.max_sentence_length)
+                        )
+            self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -Rewards, 2), self.word_mask_placeholder))
             self.loss = -tf.reduce_mean(Objective_masked)
 
         return self.loss, self.baseline_loss
