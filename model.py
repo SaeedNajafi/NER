@@ -691,7 +691,32 @@ class NER(object):
                         (-1, config.max_sentence_length)
                     )
 
-        self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -Rewards, 2), self.word_mask_placeholder))
+        temp = []
+        Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
+        Rewards_t = tf.transpose(Rewards, [1,0])
+        zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
+        for time_index in range(config.max_sentence_length):
+            if time_index < config.max_sentence_length-1:
+                temp.append(Rewards_t[time_index+1])
+            else:
+                temp.append(zeros)
+
+        temp = tf.stack(temp, axis=1)
+        Rewards = temp
+
+        Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
+        Baselines_t = tf.transpose(Baselines, [1,0])
+        zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
+        for time_index in range(config.max_sentence_length):
+            if time_index < config.max_sentence_length-1:
+                temp.append(Baselines_t[time_index+1])
+            else:
+                temp.append(zeros)
+
+        temp = tf.stack(temp, axis=1)
+        Baselines = temp
+
+        self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -tf.stop_gradient(Rewards), 2), self.word_mask_placeholder))
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=Preds,
                                     targets=self.tag_placeholder,
@@ -796,7 +821,10 @@ class NER(object):
             Preds = tf.stack(Preds, axis=1)
             Policies = tf.stack(Policies, axis=1)
             Baselines = tf.stack(Baselines, axis=1)
-
+            Baselines = tf.reshape(
+                        Baselines,
+                        (-1, config.max_sentence_length)
+                    )
             True_Score = []
             sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
             for time_index in range(config.max_sentence_length):
@@ -838,13 +866,35 @@ class NER(object):
             Final_Z_max = tf.reduce_max(Final_Z, axis=2)
             Rewards = tf.divide(tf.exp(True_Score - Final_Z_max), tf.reduce_sum(tf.exp(Final_Z - tf.expand_dims(Final_Z_max, axis=2)), axis=2))
 
+            temp = []
+            Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
+            Rewards_t = tf.transpose(Rewards, [1,0])
+            zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
+            for time_index in range(config.max_sentence_length):
+                if time_index < config.max_sentence_length-1:
+                    temp.append(Rewards_t[time_index+1])
+                else:
+                    temp.append(zeros)
+
+            temp = tf.stack(temp, axis=1)
+            Rewards = temp
+
+            Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
+            Baselines_t = tf.transpose(Baselines, [1,0])
+            zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
+            for time_index in range(config.max_sentence_length):
+                if time_index < config.max_sentence_length-1:
+                    temp.append(Baselines_t[time_index+1])
+                else:
+                    temp.append(zeros)
+
+            temp = tf.stack(temp, axis=1)
+            Baselines = temp
+            
             Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Rewards-Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
-            Baselines = tf.reshape(
-                            Baselines,
-                            (-1, config.max_sentence_length)
-                        )
-            self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -Rewards, 2), self.word_mask_placeholder))
+
+            self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -tf.stop_gradient(Rewards), 2), self.word_mask_placeholder))
             self.loss = -tf.reduce_mean(Objective_masked)
 
         return self.loss, self.baseline_loss
