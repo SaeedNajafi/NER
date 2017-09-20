@@ -691,7 +691,7 @@ class NER(object):
                         (-1, config.max_sentence_length)
                     )
 
-        self.baseline_loss = tf.reduce_mean(tf.pow(Baselines -Rewards, 2))
+        self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -tf.stop_gradient(Rewards), 2), self.word_mask_placeholder))
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=Preds,
                                     targets=self.tag_placeholder,
@@ -796,7 +796,10 @@ class NER(object):
             Preds = tf.stack(Preds, axis=1)
             Policies = tf.stack(Policies, axis=1)
             Baselines = tf.stack(Baselines, axis=1)
-
+	    Baselines = tf.reshape(
+                        Baselines,
+                        (-1, config.max_sentence_length)
+                    )
             True_Score = []
             sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
             for time_index in range(config.max_sentence_length):
@@ -841,8 +844,8 @@ class NER(object):
             Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Rewards-Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
-            self.baseline_loss = tf.reduce_mean(tf.pow(Baselines -Rewards, 2))
-            self.loss = -tf.reduce_mean(Objective_masked)
+            self.baseline_loss = tf.reduce_mean(tf.multiply(2 * tf.pow(Baselines -tf.stop_gradient(Rewards), 2), self.word_mask_placeholder))
+	    self.loss = -tf.reduce_mean(Objective_masked)
 
         return self.loss, self.baseline_loss
 
