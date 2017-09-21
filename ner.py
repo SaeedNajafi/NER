@@ -15,6 +15,7 @@ def run_epoch(
             config,
             model,
             pretrain,
+            actor,
             session,
             char_X,
             word_length_X,
@@ -28,7 +29,6 @@ def run_epoch(
 
     # We're interested in keeping track of the loss during training
     total_loss = []
-    baseline_total_loss = []
     total_steps = int(np.ceil(len(word_X) / float(config.batch_size)))
     data = ut.data_iterator(
                 char_X,
@@ -60,13 +60,12 @@ def run_epoch(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
                     pretrain = pretrain,
+                    actor = actor,
                     tag_batch=tag_data
                 )
 
-        baseline_loss, loss, _, _ = session.run([model.baseline_loss, model.loss, model.baseline_train_op, model.train_op], feed_dict=feed)
+        loss, _,= session.run([model.loss, model.train_op], feed_dict=feed)
         total_loss.append(loss)
-        baseline_total_loss.append(baseline_loss)
-
         ##
         if verbose and step % verbose == 0:
             sys.stdout.write('\r{} / {} : loss = {}'.format(
@@ -75,19 +74,12 @@ def run_epoch(
                                                         np.mean(total_loss)
                                                         )
                             )
-            sys.stdout.write('\r\n')
-            sys.stdout.write('\r{} / {} : baseline loss = {}'.format(
-                                                        step,
-                                                        total_steps,
-                                                        np.mean(baseline_total_loss)
-                                                        )
-                            )
             sys.stdout.flush()
         if verbose:
             sys.stdout.write('\r')
             sys.stdout.flush()
 
-    return np.mean(total_loss), np.mean(baseline_total_loss)
+    return np.mean(total_loss)
 
 def predict(
         config,
@@ -150,6 +142,7 @@ def predict(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
                     pretrain = False,
+                    actor = True,
                     tag_batch=tag_data
                 )
 
@@ -205,7 +198,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="actor_decoder_rnn":
+        elif config.inference=="decoder_rnn" or config.inference=="cross_beam_actor":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -273,6 +266,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = True
+        actor = False
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -284,23 +278,21 @@ def run_NER():
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
-                
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
-                session.run(tf.variables_initializer(optimizer_scope))
 
-            train_loss, baseline_train_loss = run_epoch(
-                                                    config,
-                                                    model,
-                                                    pretrain,
-                                                    session,
-                                                    data['train_data']['char_X'],
-                                                    data['train_data']['word_length_X'],
-                                                    data['train_data']['cap_X'],
-                                                    data['train_data']['word_X'],
-                                                    data['train_data']['mask_X'],
-                                                    data['train_data']['sentence_length_X'],
-                                                    data['train_data']['Y']
-                                                    )
+            train_loss = run_epoch(
+                                config,
+                                model,
+                                pretrain,
+                                actor,
+                                session,
+                                data['train_data']['char_X'],
+                                data['train_data']['word_length_X'],
+                                data['train_data']['cap_X'],
+                                data['train_data']['word_X'],
+                                data['train_data']['mask_X'],
+                                data['train_data']['sentence_length_X'],
+                                data['train_data']['Y']
+                                )
 
             _ , predictions = predict(
                                     config,
@@ -340,18 +332,20 @@ def run_NER():
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
 
+            if epoch==2 and pretrain==True:
+                pretrain=False
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
+                continue
+            if epoch==4 and actor==False:
+                actor=False
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
+                continue
+
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
-                if pretrain==True:
-                    pretrain=False
-                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                    session.run(tf.variables_initializer(optimizer_scope))
-                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
-                    session.run(tf.variables_initializer(optimizer_scope))
-                    continue
-                else:
-                    #early stopping
-                    break
+                continue
                 ###
 
             print 'Epoch training time: {} seconds'.format(time.time() - start)

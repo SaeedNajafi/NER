@@ -14,7 +14,7 @@ class Configuration(object):
     decoder_rnn_hidden_units = 34
     tag_embedding_size = 17
 
-    batch_size = 10
+    batch_size = 32
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
@@ -26,7 +26,7 @@ class Configuration(object):
     #inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
-    inference = "actor_decoder_rnn"
+    inference = "cross_beam_actor"
 
     """for decoding"""
     decoding="greedy"
