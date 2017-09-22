@@ -26,7 +26,7 @@ class Configuration(object):
     #inference = "softmax"
     #inference = "crf"
     #inference = "decoder_rnn"
-    inference = "cross_beam_actor"
+    inference = "random_beam"
 
     """for decoding"""
     decoding="greedy"

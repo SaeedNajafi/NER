@@ -14,8 +14,9 @@ import utils as ut
 def run_epoch(
             config,
             model,
+            epoch,
             pretrain,
-            actor,
+            epsilon,
             session,
             char_X,
             word_length_X,
@@ -51,6 +52,10 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
+        t = time.clock()
+        np.random.seed(step + epoch + int(t))
+        prob = np.random.uniform(low=0.0, high=1.0)
+
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -60,8 +65,9 @@ def run_epoch(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
                     pretrain = pretrain,
-                    actor = actor,
-                    tag_batch=tag_data
+                    epsilon = epsilon,
+                    prob = prob,
+                    tag_batch= tag_data
                 )
 
         loss, _,= session.run([model.loss, model.train_op], feed_dict=feed)
@@ -142,7 +148,8 @@ def predict(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
                     pretrain = False,
-                    actor = True,
+                    epsilon = 1.0,
+                    prob = 0.0,
                     tag_batch=tag_data
                 )
 
@@ -198,7 +205,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="cross_beam_actor":
+        elif config.inference=="decoder_rnn" or config.inference=="random_beam":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -266,13 +273,16 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = True
-        actor = False
+        epsilon = 1.0
+        k = 50.0
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
 
             start = time.time()
             ###
+
+            epsilon = np.divide(k, k + np.exp( k/(epoch+1) ) )
 
             #manually reseting adam optimizer
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
@@ -282,8 +292,9 @@ def run_NER():
             train_loss = run_epoch(
                                 config,
                                 model,
+                                epoch,
                                 pretrain,
-                                actor,
+                                epsilon,
                                 session,
                                 data['train_data']['char_X'],
                                 data['train_data']['word_length_X'],
@@ -334,11 +345,6 @@ def run_NER():
 
             if epoch==2 and pretrain==True:
                 pretrain=False
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                session.run(tf.variables_initializer(optimizer_scope))
-                continue
-            if epoch==4 and actor==False:
-                actor=False
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
                 continue
@@ -414,8 +420,6 @@ def run_NER():
 
 def test_NER():
     """test NER model.
-       For beam search testing, don't forget to enable its
-       paramters at the top.
     """
     config = Configuration()
     np.random.seed(config.random_seed)
