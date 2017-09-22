@@ -101,6 +101,10 @@ class NER(object):
 
         self.prob_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
+        self.rand_index_placeholder = tf.placeholder(
+                                        dtype=tf.int32,
+                                        shape=(None, config.max_sentence_length)
+                                        )
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -113,6 +117,7 @@ class NER(object):
                         pretrain,
                         epsilon,
                         prob,
+			rand_index=None,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -134,8 +139,8 @@ class NER(object):
             self.dropout_placeholder: dropout_batch,
             self.pretrain_placeholder: pretrain,
             self.epsilon_placeholder: epsilon,
-            self.prob_placeholder: prob
-
+            self.prob_placeholder: prob,
+	    self.rand_index_placeholder: rand_index
             }
 
         if tag_batch is not None:
@@ -674,6 +679,7 @@ class NER(object):
         b_size = tf.shape(H)[0]
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         tag_t = tf.transpose(self.tag_placeholder, [1,0])
+	rand_index_t = tf.transpose(self.rand_index_placeholder, [1,0])
         H_t = tf.transpose(H, [1,0,2])
         Preds = []
         with tf.variable_scope('decoder_rnn', reuse=True) as scope:
@@ -703,9 +709,8 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 Preds.append(pred)
-                seed = time_index + tf.cast(1000 * self.prob_placeholder, tf.int32)
                 def opt1(): return tf.matmul(tf.nn.softmax(pred), tag_lookup_table)
-                def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, tf.random_uniform((b_size,), minval=0, maxval=config.tag_size, dtype=tf.int32, seed=seed))
+                def opt2(): return tf.nn.embedding_lookup(tag_lookup_table, rand_index_t[time_index])
                 prev_output = tf.cond(tf.less(self.prob_placeholder, self.epsilon_placeholder), opt1, opt2)
 
             Preds = tf.stack(Preds, axis=1)
@@ -748,7 +753,7 @@ class NER(object):
 
             # zero means in beam. one means not in beam.
             Final_Z = tf.concat([Z, tf.expand_dims(tf.stop_gradient(Not_in_beam) * True_Score, axis=2)], axis=2)
-            log_likelihood = True_Score - tf.logsumexp(Final_Z)
+            log_likelihood = True_Score - tf.reduce_logsumexp(Final_Z)
             Objective = tf.multiply(log_likelihood, self.word_mask_placeholder)
             self.loss = -tf.reduce_mean(Objective)
 

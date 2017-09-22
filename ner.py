@@ -55,7 +55,7 @@ def run_epoch(
         t = time.clock()
         np.random.seed(step + epoch + int(t))
         prob = np.random.uniform(low=0.0, high=1.0)
-
+	rand_index = np.random.randint(low=0, high=config.tag_size, size=word_mask_data.shape, dtype='int')
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -67,6 +67,7 @@ def run_epoch(
                     pretrain = pretrain,
                     epsilon = epsilon,
                     prob = prob,
+		    rand_index = rand_index,
                     tag_batch= tag_data
                 )
 
@@ -139,6 +140,7 @@ def predict(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
+	rand_index = np.zeros(shape=word_mask_data.shape, dtype='int')
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -150,6 +152,7 @@ def predict(
                     pretrain = False,
                     epsilon = 1.0,
                     prob = 0.0,
+		    rand_index = rand_index,
                     tag_batch=tag_data
                 )
 
@@ -274,7 +277,7 @@ def run_NER():
         first_start = time.time()
         pretrain = True
         epsilon = 1.0
-        k = 50.0
+        k = 100.0
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -319,7 +322,6 @@ def run_NER():
                                     )
 
             print 'Training loss: {}'.format(train_loss)
-            print 'Baseline Training loss: {}'.format(baseline_train_loss)
             save_predictions(
                             config,
                             predictions,
@@ -343,16 +345,19 @@ def run_NER():
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
 
-            if epoch==2 and pretrain==True:
-                pretrain=False
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                session.run(tf.variables_initializer(optimizer_scope))
-                continue
-
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
-                continue
-                ###
+                if pretrain==True:
+			saver.restore(session, './weights/ner.weights')
+                	pretrain=False
+                	optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                	session.run(tf.variables_initializer(optimizer_scope))
+			best_val_loss = float('inf')
+        		best_val_epoch = epoch + 1
+                	continue
+		else:
+			break
+                	###
 
             print 'Epoch training time: {} seconds'.format(time.time() - start)
 
