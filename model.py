@@ -35,12 +35,9 @@ class NER(object):
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
             def random_beam_loss(): return self.train_by_random_beam(H, config)
             self.loss= tf.cond(self.pretrain_placeholder, pretrain_loss, random_beam_loss)
-
-            if config.decoding=="greedy":
-                self.outputs = self.greedy_decoding(H, config)
-
-            elif config.decoding=="beamsearch":
-                self.outputs = self.beamsearch_decoding(H, config)
+	    def pretrain_decoding(): return tf.cast(self.greedy_decoding(H, config), tf.int64)
+	    def beam_decoding(): return tf.cast(self.beam_decoding(H, config), tf.int64)
+	    self.outputs = tf.cond(self.pretrain_placeholder, pretrain_decoding, beam_decoding)
 
         self.train_op = self.add_training_op(self.loss, config)
         return
@@ -759,6 +756,83 @@ class NER(object):
 
         return self.loss
 
+    def beam_decoding(self, H, config):
+    	#batch size
+	b_size = tf.shape(H)[0]
+	"""Reload softmax prediction layer"""
+	with tf.variable_scope("softmax", reuse=True):
+		U_softmax = tf.get_variable("U_softmax")
+		b_softmax = tf.get_variable("b_softmax")
+	#reloading the tag embedding layer.
+	with tf.variable_scope("tag_embedding_layer", reuse=True):
+		tag_lookup_table = tf.get_variable("tag_lookup_table")
+	GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+	initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+	H_t = tf.transpose(H, [1,0,2])
+	Preds = []
+	with tf.variable_scope("decoder_rnn", reuse=True) as scope:
+		for time_index in range(config.max_sentence_length):
+			if time_index==0:
+				output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
+			else:
+				output, state = self.decoder_lstm_cell(prev_output, state)
+			H_and_output = tf.concat([H_t[time_index], output], axis=1)
+			pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+			Preds.append(pred)
+			policy = tf.nn.softmax(pred)
+			prev_output = tf.matmul(policy, tag_lookup_table)
+		Preds = tf.stack(Preds, axis=1)
+	self.outputs = self.simple_beam_search(Preds, config)
+	return self.outputs
+
+    def simple_beam_search(self, Preds, config):
+	#batch_size
+	b_size = tf.shape(Preds)[0]
+
+	#batch index
+	b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
+
+	#beam index
+	be_index = tf.constant(
+                                config.test_beam * config.test_beam,
+                                dtype=tf.int32,
+                                shape=(1, config.test_beam)
+                                )
+	beam_probs, beam_index = tf.nn.top_k(Preds, k=config.test_beam, sorted=True)
+        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
+        beam_index_t = tf.transpose(beam_index, [1,0,2])
+        for time_index in range(config.max_sentence_length):
+            if time_index==0:
+                prev_probs = beam_probs_t[time_index]
+                prev_indices = beam_index_t[time_index]
+                beam = tf.expand_dims(prev_indices, axis=2)
+            else:
+                probabilities = beam_probs_t[time_index]
+                prev_probs = tf.expand_dims(prev_probs, axis=2)
+                probabilities = tf.expand_dims(probabilities, axis=1)
+                probs_candidates = tf.reshape(tf.add(prev_probs, probabilities), [1, config.test_beam * config.test_beam])
+                prev_probs, max_indices = tf.nn.top_k(probs_candidates, k=config.test_beam, sorted=True)
+                indices = beam_index_t[time_index]
+               	indices_t = tf.transpose(indices, [1,0])
+                beam_t = tf.transpose(beam, [1,0,2])
+                beam_candidates = []
+                for b in range(config.test_beam):
+                    for bb in range(config.test_beam):
+                        beam_candidates.append(tf.concat(
+                                                [beam_t[b],
+                                                tf.expand_dims(indices_t[bb], axis=1)
+                                                ], axis=1
+                                                )
+                                            )
+                temp_beam = tf.stack(beam_candidates, axis=1)
+                #index
+                index = tf.add(
+                            tf.matmul(b_index, be_index),
+                            max_indices
+                            )
+                beam = tf.gather(tf.reshape(temp_beam, [1, time_index+1]), index)
+        beam_t = tf.transpose(beam, [1,0,2])
+        return beam_t[0]
     def greedy_decoding(self, H, config):
 
         #batch size
