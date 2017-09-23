@@ -676,7 +676,7 @@ class NER(object):
         b_size = tf.shape(H)[0]
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         tag_t = tf.transpose(self.tag_placeholder, [1,0])
-	rand_index_t = tf.transpose(self.rand_index_placeholder, [1,0])
+        rand_index_t = tf.transpose(self.rand_index_placeholder, [1,0])
         H_t = tf.transpose(H, [1,0,2])
         Preds = []
         with tf.variable_scope('decoder_rnn', reuse=True) as scope:
