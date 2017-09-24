@@ -37,7 +37,7 @@ class NER(object):
             self.loss= tf.cond(self.pretrain_placeholder, pretrain_loss, random_beam_loss)
 
             def pretrain_decoding(): return tf.cast(self.greedy_decoding(H, config), tf.int64)
-            def beam_decoding(): return tf.cast(self.beam_decoding(H, config), tf.int64)
+            def beam_decoding(): return tf.cast(self.random_beam_decoding(H, config), tf.int64)
             self.outputs = tf.cond(self.pretrain_placeholder, pretrain_decoding, beam_decoding)
 
         self.train_op = self.add_training_op(self.loss, config)
@@ -760,13 +760,13 @@ class NER(object):
 
         return self.loss
 
-    def beam_decoding(self, H, config):
+    def random_beam_decoding(self, H, config):
 
     	#batch size
         b_size = tf.shape(H)[0]
 
         """Reload softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True)
+        with tf.variable_scope("softmax", reuse=True):
             U_softmax = tf.get_variable("U_softmax")
             b_softmax = tf.get_variable("b_softmax")
 
@@ -802,6 +802,7 @@ class NER(object):
 
         #batch index
         b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
+        
         #beam index
         be_index = tf.constant(
                                 config.test_beam * config.test_beam,
