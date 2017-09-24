@@ -74,22 +74,44 @@ def run_epoch(
                     tag_batch= tag_data
                 )
 
-        loss, _,= session.run([model.loss, model.train_op], feed_dict=feed)
-        total_loss.append(loss)
-        ##
-        if verbose and step % verbose == 0:
-            sys.stdout.write('\r{} / {} : loss = {}'.format(
-                                                        step,
-                                                        total_steps,
-                                                        np.mean(total_loss)
-                                                        )
-                            )
-            sys.stdout.flush()
-        if verbose:
-            sys.stdout.write('\r')
-            sys.stdout.flush()
+        if pretrain:
+            loss , _ = session.run([model.loss, model.train_op], feed_dict=feed)
+            total_loss.append(loss)
+            ##
+            if verbose and step % verbose == 0:
+                sys.stdout.write('\r{} / {} : loss = {}'.format(
+                                                            step,
+                                                            total_steps,
+                                                            np.mean(total_loss)
+                                                            )
+                                )
+                sys.stdout.flush()
+            if verbose:
+                sys.stdout.write('\r')
+                sys.stdout.flush()
 
-    return np.mean(total_loss)
+        else:
+            baseline_loss, loss, _, _ = session.run([model.baseline_loss, model.loss, model.baseline_train_op, model.train_op], feed_dict=feed)
+            total_loss.append(loss)
+            baseline_total_loss.append(baseline_loss)
+            ##
+            if verbose and step % verbose == 0:
+                sys.stdout.write('\r{} / {} : loss = {}  | baseline loss = {}'.format(
+                                                            step,
+                                                            total_steps,
+                                                            np.mean(total_loss),
+                                                            np.mean(baseline_total_loss)
+                                                            )
+                                )
+                sys.stdout.flush()
+            if verbose:
+                sys.stdout.write('\r')
+                sys.stdout.flush()
+
+    if pretrain:
+        return np.mean(total_loss), 0
+    else:
+        return np.mean(total_loss), np.mean(baseline_total_loss)
 
 def predict(
         config,
@@ -280,8 +302,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = True
-        epsilon = 1.0
-        k = 100.0
+
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -295,6 +316,10 @@ def run_NER():
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
+
+                if not pretrain:
+                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
+                    session.run(tf.variables_initializer(optimizer_scope))
 
             train_loss = run_epoch(
                                 config,
@@ -326,6 +351,7 @@ def run_NER():
                                     )
 
             print 'Training loss: {}'.format(train_loss)
+            if not pretrain: print 'Baseline Training loss: {}'.format(baseline_train_loss)
             save_predictions(
                             config,
                             predictions,
@@ -352,13 +378,14 @@ def run_NER():
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
                 if pretrain==True:
+                    pretrain=False
                     saver.restore(session, './weights/ner.weights')
-                	pretrain=False
-                	optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                	session.run(tf.variables_initializer(optimizer_scope))
+                    saver.save(session, './pretrain_weights/ner.weights')
+                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                    session.run(tf.variables_initializer(optimizer_scope))
                     best_val_loss = float('inf')
                     best_val_epoch = epoch + 1
-                	continue
+                    continue
                 else:
                     break
                     ###
