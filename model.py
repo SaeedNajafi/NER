@@ -100,17 +100,6 @@ class NER(object):
 
         self.pretrain_placeholder = tf.placeholder(dtype=tf.bool, shape=())
 
-
-        self.epsilon_placeholder = tf.placeholder(dtype=tf.float32, shape=())
-
-
-        self.prob_placeholder = tf.placeholder(dtype=tf.float32, shape=())
-
-
-        self.rand_index_placeholder = tf.placeholder(
-                                        dtype=tf.int32,
-                                        shape=(None, config.max_sentence_length)
-                                        )
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -121,9 +110,6 @@ class NER(object):
                         sentence_length_batch,
                         dropout_batch,
                         pretrain,
-                        epsilon,
-                        prob,
-                        rand_index=None,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -143,10 +129,7 @@ class NER(object):
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
             self.dropout_placeholder: dropout_batch,
-            self.pretrain_placeholder: pretrain,
-            self.epsilon_placeholder: epsilon,
-            self.prob_placeholder: prob,
-            self.rand_index_placeholder: rand_index
+            self.pretrain_placeholder: pretrain
             }
 
         if tag_batch is not None:
@@ -651,6 +634,7 @@ class NER(object):
 
         return self.loss, 0.0
 
+    def train_by_actor_decoder_rnn(self, H, config):
         """
         Apply an actor layer in the training step.
         Defines the loss during training.
@@ -820,9 +804,9 @@ class NER(object):
 
         #beam index
         be_index = tf.constant(
-                                config.test_beam * config.test_beam,
+                                config.beamsize * config.beamsize,
                                 dtype=tf.int32,
-                                shape=(1, config.test_beam)
+                                shape=(1, config.beamsize)
                                 )
 
 
@@ -833,13 +817,13 @@ class NER(object):
                     H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                     predictions = tf.nn.softmax(pred)
-                    probs, indices = tf.nn.top_k(predictions, k=config.test_beam, sorted=True)
+                    probs, indices = tf.nn.top_k(predictions, k=config.beamsize, sorted=True)
                     prev_indices = indices
                     beam = tf.expand_dims(indices, axis=2)
                     prev_probs = tf.log(probs)
-                    prev_c_states = [c_state for i in range(config.test_beam)]
+                    prev_c_states = [c_state for i in range(config.beamsize)]
                     prev_c_states = tf.stack(prev_c_states, axis=1)
-                    prev_m_states = [m_state for i in range(config.test_beam)]
+                    prev_m_states = [m_state for i in range(config.beamsize)]
                     prev_m_states = tf.stack(prev_m_states, axis=1)
 
                 else:
@@ -854,7 +838,7 @@ class NER(object):
                     beam_candidates = []
                     c_state_candidates = []
                     m_state_candidates = []
-                    for b in range(config.test_beam):
+                    for b in range(config.beamsize):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
                         output, (c_state, m_state) = self.decoder_lstm_cell(
                                                         prev_output,
@@ -864,10 +848,10 @@ class NER(object):
                         H_and_output = tf.concat([H_t[time_index], output], axis=1)
                         pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                         predictions = tf.nn.softmax(pred)
-                        probs, indices = tf.nn.top_k(predictions, k=config.test_beam, sorted=True)
+                        probs, indices = tf.nn.top_k(predictions, k=config.beamsize, sorted=True)
                         probs_t = tf.transpose(probs, [1,0])
                         indices_t = tf.transpose(indices, [1,0])
-                        for bb in range(config.test_beam):
+                        for bb in range(config.beamsize):
                             probs_candidates.append(tf.add(prev_probs_t[b], tf.log(probs_t[bb])))
                             indices_candidates.append(indices_t[bb])
                             beam_candidates.append(tf.concat(
@@ -884,7 +868,7 @@ class NER(object):
                     temp_beam = tf.stack(beam_candidates, axis=1)
                     temp_c_states = tf.stack(c_state_candidates, axis=1)
                     temp_m_states = tf.stack(m_state_candidates, axis=1)
-                    _, max_indices = tf.nn.top_k(temp_probs, k=config.test_beam, sorted=True)
+                    _, max_indices = tf.nn.top_k(temp_probs, k=config.beamsize, sorted=True)
 
                     #index
                     index = tf.add(

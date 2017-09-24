@@ -14,9 +14,7 @@ import utils as ut
 def run_epoch(
             config,
             model,
-            epoch,
             pretrain,
-            epsilon,
             session,
             char_X,
             word_length_X,
@@ -52,13 +50,6 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
-        t = time.clock()
-        np.random.seed(step + epoch + int(t))
-
-        prob = np.random.uniform(low=0.0, high=1.0)
-
-        rand_index = np.random.randint(low=0, high=config.tag_size, size=word_mask_data.shape, dtype='int')
-
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -68,9 +59,6 @@ def run_epoch(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
                     pretrain = pretrain,
-                    epsilon = epsilon,
-                    prob = prob,
-                    rand_index = rand_index,
                     tag_batch= tag_data
                 )
 
@@ -164,9 +152,7 @@ def predict(
                 word_mask_data,
                 sentence_length_data,
                 tag_data) in enumerate(data):
-
-        rand_index = np.zeros(shape=word_mask_data.shape, dtype='int')
-
+        
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -176,9 +162,6 @@ def predict(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
                     pretrain = False,
-                    epsilon = 1.0,
-                    prob = 0.0,
-                    rand_index = rand_index,
                     tag_batch=tag_data
                 )
 
@@ -234,7 +217,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="random_beam":
+        elif config.inference=="decoder_rnn" or config.inference=="actor_decoded_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -310,8 +293,6 @@ def run_NER():
             start = time.time()
             ###
 
-            epsilon = np.divide(k, k + np.exp( k/(epoch+1) ) )
-
             #manually reseting adam optimizer
             if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
@@ -321,7 +302,7 @@ def run_NER():
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
 
-            train_loss = run_epoch(
+            train_loss , baseline_train_loss = run_epoch(
                                 config,
                                 model,
                                 epoch,
