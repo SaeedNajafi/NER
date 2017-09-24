@@ -32,17 +32,20 @@ class NER(object):
                 self.outputs = self.beamsearch_decoding(H, config)
 
         elif config.inference=="actor_decoder_rnn":
+
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
-            def actor_beam_loss(): return self.train_by_actor_decoder_rnn(H, config)
-            self.loss, self.baseline_loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_beam_loss)
-            
+            def actor_loss(): return self.train_by_actor_decoder_rnn(H, config)
+            self.loss, self.baseline_loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
+
             #optimizer to learn the baseline estimates
             with tf.variable_scope("baseline_adam_optimizer"):
                 self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
 
-            def pretrain_decoding(): return tf.cast(self.greedy_decoding(H, config), tf.int64)
-            def actor_decoding(): return tf.cast(self.actor_beam_decoding(H, config), tf.int64)
-            self.outputs = tf.cond(self.pretrain_placeholder, pretrain_decoding, actor_decoding)
+            if config.decoding=="greedy":
+                self.outputs = self.greedy_decoding(H, config)
+
+            elif config.decoding=="beamsearch":
+                self.outputs = self.beamsearch_decoding(H, config)
 
         self.train_op = self.add_training_op(self.loss, config)
         return
@@ -543,21 +546,6 @@ class NER(object):
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
         b_size = tf.shape(tag_embeddings)[0]
 
-        with tf.variable_scope("baseline"):
-            U_baseline = tf.get_variable(
-                            "U_baseline",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 1),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b_baseline = tf.get_variable(
-                            "b_baseline",
-                            (1,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
         #add GO symbol into the begining of every sentence and
         #shift rest by one position.
 
@@ -573,8 +561,9 @@ class NER(object):
         temp = tf.stack(temp, axis=1)
 
         tag_embeddings_final = temp
+
         with tf.variable_scope('decoder_rnn') as scope:
-	    self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
                                         cell_clip=None,
@@ -634,64 +623,6 @@ class NER(object):
                             (-1, config.max_sentence_length, config.tag_size)
                         )
 
-        True_Score = []
-        sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
-        for time_index in range(config.max_sentence_length):
-            sequence_l = sequence_l + 1
-            true_score = tf.contrib.crf.crf_unary_score(
-                                tag_indices=self.tag_placeholder,
-                                sequence_lengths=sequence_l,
-                                inputs=Preds
-                                )
-            True_Score.append(true_score)
-
-
-        Z = []
-        beam_probs, _ = tf.nn.top_k(Preds, k=config.train_beam, sorted=True)
-        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
-        for time_index in range(config.max_sentence_length):
-            if (time_index==0):
-                prev_probs = beam_probs_t[time_index]
-            else:
-                probabilities = beam_probs_t[time_index]
-                prev_probs = tf.expand_dims(prev_probs, axis=2)
-                probabilities = tf.expand_dims(probabilities, axis=1)
-                prob_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.train_beam * config.train_beam])
-                prev_probs, _ = tf.nn.top_k(prob_candidates, k=config.train_beam, sorted=True)
-
-            z = prev_probs
-            Z.append(z)
-
-        Z = tf.stack(Z, axis=1)
-        True_Score = tf.stack(True_Score, axis=1)
-
-        Diff = tf.abs(Z - tf.expand_dims(True_Score, axis=2))
-        Not_in_beam = tf.greater(Diff, 1e-8)
-        Not_in_beam = tf.cast(Not_in_beam, tf.float32)
-        Not_in_beam = tf.reduce_prod(Not_in_beam, axis=2)
-
-        # zero means in beam. one means not in beam.
-        Final_Z = tf.concat([Z, tf.expand_dims(Not_in_beam * True_Score, axis=2)], axis=2)
-        Final_Z_max = tf.reduce_max(Final_Z, axis=2)
-        Rewards = tf.divide(tf.exp(True_Score - Final_Z_max), tf.reduce_sum(tf.exp(Final_Z - tf.expand_dims(Final_Z_max, axis=2)), axis=2))
-
-        Baselines = tf.add(
-                    tf.matmul(
-                        tf.reshape(
-                            tf.stop_gradient(H_and_tag_scores),
-                            (-1, config.word_rnn_hidden_units + config.decoder_rnn_hidden_units)
-                        ),
-                        U_baseline
-                    ),
-                    b_baseline
-                )
-
-        Baselines = tf.reshape(
-                        Baselines,
-                        (-1, config.max_sentence_length)
-                    )
-
-        self.baseline_loss = tf.reduce_mean(tf.pow(Baselines -Rewards, 2))
         self.loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=Preds,
                                     targets=self.tag_placeholder,
@@ -700,11 +631,11 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
-        return self.loss, self.baseline_loss
+        return self.loss, 0.0
 
     def train_by_actor_decoder_rnn(self, H, config):
         """
-        Apply an actor_beam layer in the training step.
+        Apply an actor layer in the training step.
         Defines the loss during training.
         """
 
@@ -734,7 +665,7 @@ class NER(object):
                             tf.constant_initializer(0.0)
                             )
 
-        with tf.variable_scope("baseline", reuse=True):
+        with tf.variable_scope("baseline"):
             U_baseline = tf.get_variable(
                             "U_baseline",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 1),
@@ -751,9 +682,7 @@ class NER(object):
 
         b_size = tf.shape(H)[0]
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        tag_t = tf.transpose(self.tag_placeholder, [1,0])
         H_t = tf.transpose(H, [1,0,2])
-        Preds = []
         Policies = []
         Baselines = []
         with tf.variable_scope('decoder_rnn', reuse=True) as scope:
@@ -788,154 +717,34 @@ class NER(object):
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 policy = tf.nn.softmax(pred)
-                prev_output = tf.matmul(policy, tag_lookup_table)
 
-                Preds.append(pred)
+                #sampling from policy based on the peaked soft argmax with alpha 1000
+                prev_output = tf.matmul(tf.nn.softmax(1000 * pred), tag_lookup_table)
+
                 Policies.append(policy)
 
-            Preds = tf.stack(Preds, axis=1)
             Policies = tf.stack(Policies, axis=1)
             Baselines = tf.stack(Baselines, axis=1)
 
-            True_Score = []
-            sequence_l = self.sentence_length_placeholder - self.sentence_length_placeholder
-            for time_index in range(config.max_sentence_length):
-                sequence_l = sequence_l + 1
-                true_score = tf.contrib.crf.crf_unary_score(
-                                    tag_indices=self.tag_placeholder,
-                                    sequence_lengths=sequence_l,
-                                    inputs=Preds
-                                    )
-                True_Score.append(true_score)
+            Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, one_value=10.0), axis=2)
 
-
-            Z = []
-            beam_probs, _ = tf.nn.top_k(Preds, k=config.train_beam, sorted=True)
-            beam_probs_t = tf.transpose(beam_probs, [1,0,2])
-            for time_index in range(config.max_sentence_length):
-                if (time_index==0):
-                    prev_probs = beam_probs_t[time_index]
+            Rewards_t = tf.transpose(Rewards, [1,0])
+            Returns = []
+            for t in range(config.max_sentence_length):
+                if t < config.max_sentence_length - 4
+                    ret =  Rewards_t[t] + 0.9 * Rewards_t[t+1] + 0.9 * 0.9 * Rewards_t[t+2] + 0.9 * 0.9 * 0.9 * Rewards_t[t+3] + 0.9 * 0.9 * 0.9 * 0.9 * Rewards_t[t+4]
                 else:
-                    probabilities = beam_probs_t[time_index]
-                    prev_probs = tf.expand_dims(prev_probs, axis=2)
-                    probabilities = tf.expand_dims(probabilities, axis=1)
-                    prob_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.train_beam * config.train_beam])
-                    prev_probs, _ = tf.nn.top_k(prob_candidates, k=config.train_beam, sorted=True)
+                    ret = 0.0
+                Returns.append(ret)
+            Returns = tf.stack(Returns, axis=1)
 
-                z = prev_probs
-                Z.append(z)
-
-            Z = tf.stack(Z, axis=1)
-            True_Score = tf.stack(True_Score, axis=1)
-
-            Diff = tf.abs(Z - tf.expand_dims(True_Score, axis=2))
-            Not_in_beam = tf.greater(Diff, 1e-8)
-            Not_in_beam = tf.cast(Not_in_beam, tf.float32)
-            Not_in_beam = tf.reduce_prod(Not_in_beam, axis=2)
-
-            # zero means in beam. one means not in beam.
-            Final_Z = tf.concat([Z, tf.expand_dims(Not_in_beam * True_Score, axis=2)], axis=2)
-            Final_Z_max = tf.reduce_max(Final_Z, axis=2)
-            Rewards = tf.divide(tf.exp(True_Score - Final_Z_max), tf.reduce_sum(tf.exp(Final_Z - tf.expand_dims(Final_Z_max, axis=2)), axis=2))
-
-            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Rewards-Baselines)
+            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns-Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
-            self.baseline_loss = tf.reduce_mean(tf.pow(Baselines -Rewards, 2))
+            self.baseline_loss = tf.reduce_mean(tf.pow(Baselines - tf.stop_gradient(Returns), 2) * self.word_mask_placeholder) / 2.0
             self.loss = -tf.reduce_mean(Objective_masked)
-
+            
         return self.loss, self.baseline_loss
-
-    def actor_beam_decoding(self, H, config):
-
-        #batch size
-        b_size = tf.shape(H)[0]
-
-        """Reload softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
-            U_softmax = tf.get_variable("U_softmax")
-            b_softmax = tf.get_variable("b_softmax")
-
-        #reloading the tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer", reuse=True):
-            tag_lookup_table = tf.get_variable("tag_lookup_table")
-
-
-        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-        H_t = tf.transpose(H, [1,0,2])
-        Preds = []
-
-        with tf.variable_scope("decoder_rnn", reuse=True) as scope:
-            for time_index in range(config.max_sentence_length):
-                if time_index==0:
-                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
-                else:
-                    output, state = self.decoder_lstm_cell(prev_output, state)
-
-                H_and_output = tf.concat([H_t[time_index], output], axis=1)
-                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-                Preds.append(pred)
-                policy = tf.nn.softmax(pred)
-                prev_output = tf.matmul(policy, tag_lookup_table)
-
-            Preds = tf.stack(Preds, axis=1)
-        self.outputs = self.simple_beam_search(Preds, config)
-        return self.outputs
-
-    def simple_beam_search(self, Preds, config):
-
-        #batch_size
-        b_size = tf.shape(Preds)[0]
-
-        #batch index
-        b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
-
-        #beam index
-        be_index = tf.constant(
-                                config.test_beam * config.test_beam,
-                                dtype=tf.int32,
-                                shape=(1, config.test_beam)
-                                )
-
-        beam_probs, beam_index = tf.nn.top_k(Preds, k=config.test_beam, sorted=True)
-        beam_probs_t = tf.transpose(beam_probs, [1,0,2])
-        beam_index_t = tf.transpose(beam_index, [1,0,2])
-
-        for time_index in range(config.max_sentence_length):
-            if time_index==0:
-                prev_probs = beam_probs_t[time_index]
-                prev_indices = beam_index_t[time_index]
-                beam = tf.expand_dims(prev_indices, axis=2)
-            else:
-                probabilities = beam_probs_t[time_index]
-                prev_probs = tf.expand_dims(prev_probs, axis=2)
-                probabilities = tf.expand_dims(probabilities, axis=1)
-                probs_candidates = tf.reshape(tf.add(prev_probs, probabilities), [-1, config.test_beam * config.test_beam])
-                prev_probs, max_indices = tf.nn.top_k(probs_candidates, k=config.test_beam, sorted=True)
-                indices = beam_index_t[time_index]
-                indices_t = tf.transpose(indices, [1,0])
-                beam_t = tf.transpose(beam, [1,0,2])
-                beam_candidates = []
-                for b in range(config.test_beam):
-                    for bb in range(config.test_beam):
-                        beam_candidates.append(tf.concat(
-                                                [beam_t[b],
-                                                 tf.expand_dims(indices_t[bb], axis=1)
-                                                 ], axis=1
-                                                 )
-                                            )
-                temp_beam = tf.stack(beam_candidates, axis=1)
-                #index
-                index = tf.add(
-                            tf.matmul(b_index, be_index),
-                            max_indices
-                            )
-                beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
-
-        beam_t = tf.transpose(beam, [1,0,2])
-
-        return beam_t[0]
 
     def greedy_decoding(self, H, config):
 

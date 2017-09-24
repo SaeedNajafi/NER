@@ -31,8 +31,7 @@ class Configuration(object):
     """for decoding"""
     decoding="greedy"
     #decoding="beamsearch"
-    train_beam = 17
-    test_beam = 4
+    beamsize = 4
 
     """path to different files"""
     word_dic_path = './en_data/glove_en_word_100_dic.txt'
