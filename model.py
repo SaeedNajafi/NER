@@ -33,9 +33,10 @@ class NER(object):
 
         elif config.inference=="actor_decoder_rnn":
 
-            def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
-            def actor_loss(): return self.train_by_actor_decoder_rnn(H, config)
-            self.loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
+            self.train_by_actor_decoder_rnn(H, config)
+
+	    with tf.variable_scope("baseline_adam_optimizer"):
+                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
 
             if config.decoding=="greedy":
                 self.outputs = self.greedy_decoding(H, config)
@@ -637,7 +638,7 @@ class NER(object):
         """
 
         #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer", reuse=True):
+        with tf.variable_scope("tag_embedding_layer"):
             tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
                                     shape = (config.tag_size, config.tag_embedding_size),
@@ -647,7 +648,7 @@ class NER(object):
                                     )
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
+        with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
@@ -694,9 +695,10 @@ class NER(object):
         b_size = tf.shape(H)[0]
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         H_t = tf.transpose(H, [1,0,2])
+	tag_t = tf.transpose(self.tag_placeholder, [1,0])
         Policies = []
         Baselines = []
-        with tf.variable_scope('decoder_rnn', reuse=True) as scope:
+        with tf.variable_scope('decoder_rnn') as scope:
             self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
@@ -730,8 +732,9 @@ class NER(object):
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 policy = tf.nn.softmax(pred)
 
-                #sampling from policy based on the peaked soft argmax with alpha 10000
-                prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
+		def opt2(): return tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
+		def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
+                prev_output = tf.cond(self.pretrain_placeholder, opt1, opt2)
 
                 Policies.append(policy)
 
@@ -743,7 +746,6 @@ class NER(object):
                           (-1, config.max_sentence_length)
                       )
 
-            #Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=10.0), axis=2)
             Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * Rewards - 1.0
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
@@ -764,12 +766,21 @@ class NER(object):
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
-            self.loss = -tf.reduce_mean(Objective_masked)
+            actor_loss = -tf.reduce_mean(Objective_masked)
 
-            with tf.variable_scope("baseline_adam_optimizer"):
-                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
+	    pretrain_loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=Preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
 
-        return self.loss
+	   def opt1(): return pretrain_loss
+	   def opt2(): return actor_loss
+	   self.loss = tf.cond(self.pretrain_placeholder, opt1, opt2)
+
+        return self.loss, self.baseline_loss
 
     def greedy_decoding(self, H, config):
 
