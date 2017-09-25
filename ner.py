@@ -152,7 +152,7 @@ def predict(
                 word_mask_data,
                 sentence_length_data,
                 tag_data) in enumerate(data):
-        
+
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -217,7 +217,7 @@ def predict(
             predicted_indices = preds.argmax(axis=2)
             results.append(predicted_indices)
 
-        elif config.inference=="decoder_rnn" or config.inference=="actor_decoded_rnn":
+        elif config.inference=="decoder_rnn" or config.inference=="actor_decoder_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -305,9 +305,7 @@ def run_NER():
             train_loss , baseline_train_loss = run_epoch(
                                 config,
                                 model,
-                                epoch,
                                 pretrain,
-                                epsilon,
                                 session,
                                 data['train_data']['char_X'],
                                 data['train_data']['word_length_X'],
@@ -355,6 +353,15 @@ def run_NER():
                 if not os.path.exists("./weights"):
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
+            if epoch==1 and pretrain==True:
+                    pretrain=False
+                    saver.restore(session, './weights/ner.weights')
+                    saver.save(session, './pretrain_weights/ner.weights')
+                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                    session.run(tf.variables_initializer(optimizer_scope))
+                    best_val_loss = float('inf')
+                    best_val_epoch = epoch + 1
+                    continue
 
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:

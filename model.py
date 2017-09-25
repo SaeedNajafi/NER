@@ -32,10 +32,11 @@ class NER(object):
                 self.outputs = self.beamsearch_decoding(H, config)
 
         elif config.inference=="actor_decoder_rnn":
-
-            def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
-            def actor_loss(): return self.train_by_actor_decoder_rnn(H, config)
-            self.loss, self.baseline_loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
+	    loss1 = self.train_by_decoder_rnn(H, config)
+	    loss2, self.baseline_loss = self.train_by_actor_decoder_rnn(H, config)
+            def pretrain_loss(): return loss1
+            def actor_loss(): return loss2
+            self.loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
 
             #optimizer to learn the baseline estimates
             with tf.variable_scope("baseline_adam_optimizer"):
@@ -632,7 +633,7 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
-        return self.loss, 0.0
+        return self.loss
 
     def train_by_actor_decoder_rnn(self, H, config):
         """
@@ -711,6 +712,10 @@ class NER(object):
 
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
+		
+                #forward pass for the baseline estimation
+                baseline = tf.add(tf.matmul(tf.stop_gradient(H_and_output), U_baseline), b_baseline)
+                Baselines.append(baseline)
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 policy = tf.nn.softmax(pred)
 
@@ -721,16 +726,20 @@ class NER(object):
 
             Policies = tf.stack(Policies, axis=1)
             Baselines = tf.stack(Baselines, axis=1)
-
-            Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, one_value=10.0), axis=2)
+	    Baselines = tf.reshape(
+                          Baselines,
+                          (-1, config.max_sentence_length)
+                      )
+            Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=10.0), axis=2)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
             Returns = []
+	    zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
-                if t < config.max_sentence_length - 4
+                if t < config.max_sentence_length - 4:
                     ret =  Rewards_t[t] + 0.9 * Rewards_t[t+1] + 0.9 * 0.9 * Rewards_t[t+2] + 0.9 * 0.9 * 0.9 * Rewards_t[t+3] + 0.9 * 0.9 * 0.9 * 0.9 * Rewards_t[t+4]
                 else:
-                    ret = 0.0
+                    ret = zeros
                 Returns.append(ret)
             Returns = tf.stack(Returns, axis=1)
 
