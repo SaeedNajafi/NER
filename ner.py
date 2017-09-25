@@ -285,7 +285,7 @@ def run_NER():
 
         session.run(init)
         first_start = time.time()
-        pretrain = False
+        pretrain = True
 
         for epoch in xrange(config.max_epochs):
             print
@@ -367,7 +367,7 @@ def run_NER():
 
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
-                    
+
                     best_val_loss = float('inf')
                     best_val_epoch = epoch + 1
                     continue
@@ -454,7 +454,7 @@ def test_NER():
 
         tf.set_random_seed(config.random_seed)
         session.run(init)
-        saver.restore(session, './pretrain_weights/ner.weights')
+        saver.restore(session, './weights/ner.weights')
         print
         print
         print 'Dev'

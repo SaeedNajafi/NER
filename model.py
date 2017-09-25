@@ -32,10 +32,9 @@ class NER(object):
                 self.outputs = self.beamsearch_decoding(H, config)
 
         elif config.inference=="actor_decoder_rnn":
-
             self.train_by_actor_decoder_rnn(H, config)
 
-	    with tf.variable_scope("baseline_adam_optimizer"):
+            with tf.variable_scope("baseline_adam_optimizer"):
                 self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
 
             if config.decoding=="greedy":
@@ -664,29 +663,29 @@ class NER(object):
                             )
 
         with tf.variable_scope("baseline"):
-            W_baseline = tf.get_variable(
-                            "W_baseline",
+            W1_baseline = tf.get_variable(
+                            "W1_baseline",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 50),
                             tf.float32,
                             self.xavier_initializer
                             )
 
-            bb_baseline = tf.get_variable(
-                            "bb_baseline",
+            b1_baseline = tf.get_variable(
+                            "b1_baseline",
                             (50,),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
 
-            U_baseline = tf.get_variable(
-                            "U_baseline",
+            W2_baseline = tf.get_variable(
+                            "W2_baseline",
                             (50, 1),
                             tf.float32,
                             self.xavier_initializer
                             )
 
-            b_baseline = tf.get_variable(
-                            "b_baseline",
+            b2_baseline = tf.get_variable(
+                            "b2_baseline",
                             (1,),
                             tf.float32,
                             tf.constant_initializer(0.0)
@@ -695,7 +694,7 @@ class NER(object):
         b_size = tf.shape(H)[0]
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         H_t = tf.transpose(H, [1,0,2])
-	tag_t = tf.transpose(self.tag_placeholder, [1,0])
+        tag_t = tf.transpose(self.tag_placeholder, [1,0])
         Policies = []
         Baselines = []
         with tf.variable_scope('decoder_rnn') as scope:
@@ -725,16 +724,16 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
                 #forward pass for the baseline estimation
-                baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W_baseline), bb_baseline))
-                baseline = tf.add(tf.matmul(baseline, U_baseline), b_baseline)
+                baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
+                baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
                 Baselines.append(baseline)
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 policy = tf.nn.softmax(pred)
 
-		def opt2(): return tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
-		def opt1(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
-                prev_output = tf.cond(self.pretrain_placeholder, opt1, opt2)
+                def generated_tag(): return tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
+                def true_tag(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
+                prev_output = tf.cond(self.pretrain_placeholder, true_tag, generated_tag)
 
                 Policies.append(policy)
 
@@ -765,10 +764,10 @@ class NER(object):
             Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
-            self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
-            actor_loss = -tf.reduce_mean(Objective_masked)
+        self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
+        actor_loss = -tf.reduce_mean(Objective_masked)
 
-	    pretrain_loss = tf.contrib.seq2seq.sequence_loss(
+        pretrain_loss = tf.contrib.seq2seq.sequence_loss(
                                     logits=Preds,
                                     targets=self.tag_placeholder,
                                     weights=self.word_mask_placeholder,
@@ -776,10 +775,9 @@ class NER(object):
                                     average_across_batch=True
                                     )
 
-	   def opt1(): return pretrain_loss
-	   def opt2(): return actor_loss
-	   self.loss = tf.cond(self.pretrain_placeholder, opt1, opt2)
-
+        def loss1(): return pretrain_loss
+        def loss2(): return actor_loss
+        self.loss = tf.cond(self.pretrain_placeholder, loss1, loss2)
         return self.loss, self.baseline_loss
 
     def greedy_decoding(self, H, config):
