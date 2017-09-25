@@ -637,7 +637,7 @@ class NER(object):
         """
 
         #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer"):
+        with tf.variable_scope("tag_embedding_layer", reuse=True):
             tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
                                     shape = (config.tag_size, config.tag_embedding_size),
@@ -647,7 +647,7 @@ class NER(object):
                                     )
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax"):
+        with tf.variable_scope("softmax", reuse=True):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
@@ -696,7 +696,7 @@ class NER(object):
         H_t = tf.transpose(H, [1,0,2])
         Policies = []
         Baselines = []
-        with tf.variable_scope('decoder_rnn') as scope:
+        with tf.variable_scope('decoder_rnn', reuse=True) as scope:
             self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
