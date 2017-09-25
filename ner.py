@@ -85,7 +85,7 @@ def run_epoch(
             baseline_total_loss.append(baseline_loss)
             ##
             if verbose and step % verbose == 0:
-                sys.stdout.write('\r{} / {} : loss = {}  | baseline loss = {}'.format(
+                sys.stdout.write('\r{} / {} : loss = {}  |  baseline loss = {}'.format(
                                                             step,
                                                             total_steps,
                                                             np.mean(total_loss),
@@ -286,7 +286,6 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = False
-	saver.restore(session, './pretrain_weights/ner.weights')
 
         for epoch in xrange(config.max_epochs):
             print
@@ -368,7 +367,7 @@ def run_NER():
 
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
-
+                    
                     best_val_loss = float('inf')
                     best_val_epoch = epoch + 1
                     continue

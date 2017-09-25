@@ -35,11 +35,8 @@ class NER(object):
 
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
             def actor_loss(): return self.train_by_actor_decoder_rnn(H, config)
-            self.loss, self.baseline_loss  = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
-            #self.loss, self.baseline_loss  = self.train_by_actor_decoder_rnn(H, config)
-	    #optimizer to learn the baseline estimates
-            with tf.variable_scope("baseline_adam_optimizer"):
-                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
+            self.loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
+
             if config.decoding=="greedy":
                 self.outputs = self.greedy_decoding(H, config)
 
@@ -666,7 +663,7 @@ class NER(object):
                             )
 
         with tf.variable_scope("baseline"):
-	    W_baseline = tf.get_variable(
+            W_baseline = tf.get_variable(
                             "W_baseline",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 50),
                             tf.float32,
@@ -726,15 +723,15 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
                 #forward pass for the baseline estimation
-		baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W_baseline), bb_baseline))
+                baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W_baseline), bb_baseline))
                 baseline = tf.add(tf.matmul(baseline, U_baseline), b_baseline)
                 Baselines.append(baseline)
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
                 policy = tf.nn.softmax(pred)
 
-                #sampling from policy based on the peaked soft argmax with alpha 1000
-                prev_output = tf.matmul(tf.nn.softmax(1000 * pred), tag_lookup_table)
+                #sampling from policy based on the peaked soft argmax with alpha 10000
+                prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
 
                 Policies.append(policy)
 
@@ -747,9 +744,9 @@ class NER(object):
                       )
 
             #Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=10.0), axis=2)
-	    Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
-	    Rewards = 2 * (Rewards - 0.5)
-	    Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
+            Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
+            Rewards = 2 * Rewards - 1.0
+            Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
             Returns = []
@@ -769,7 +766,10 @@ class NER(object):
             self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
             self.loss = -tf.reduce_mean(Objective_masked)
 
-        return self.loss, self.baseline_loss
+            with tf.variable_scope("baseline_adam_optimizer"):
+                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
+
+        return self.loss
 
     def greedy_decoding(self, H, config):
 
