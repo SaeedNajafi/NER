@@ -285,7 +285,8 @@ def run_NER():
 
         session.run(init)
         first_start = time.time()
-        pretrain = True
+        pretrain = False
+	saver.restore(session, './pretrain_weights/ner.weights')
 
         for epoch in xrange(config.max_epochs):
             print
@@ -454,7 +455,7 @@ def test_NER():
 
         tf.set_random_seed(config.random_seed)
         session.run(init)
-        saver.restore(session, './weights/ner.weights')
+        saver.restore(session, './pretrain_weights/ner.weights')
         print
         print
         print 'Dev'

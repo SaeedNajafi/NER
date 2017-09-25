@@ -35,8 +35,11 @@ class NER(object):
 
             def pretrain_loss(): return self.train_by_decoder_rnn(H, config)
             def actor_loss(): return self.train_by_actor_decoder_rnn(H, config)
-            self.loss = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
-
+            self.loss, self.baseline_loss  = tf.cond(self.pretrain_placeholder, pretrain_loss, actor_loss)
+            #self.loss, self.baseline_loss  = self.train_by_actor_decoder_rnn(H, config)
+	    #optimizer to learn the baseline estimates
+            with tf.variable_scope("baseline_adam_optimizer"):
+                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
             if config.decoding=="greedy":
                 self.outputs = self.greedy_decoding(H, config)
 
@@ -637,7 +640,7 @@ class NER(object):
         """
 
         #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer", reuse=True):
+        with tf.variable_scope("tag_embedding_layer"):
             tag_lookup_table = tf.get_variable(
                                     name = "tag_lookup_table",
                                     shape = (config.tag_size, config.tag_embedding_size),
@@ -647,7 +650,7 @@ class NER(object):
                                     )
 
         """softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
+        with tf.variable_scope("softmax"):
             U_softmax = tf.get_variable(
                             "U_softmax",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
@@ -663,9 +666,23 @@ class NER(object):
                             )
 
         with tf.variable_scope("baseline"):
+	    W_baseline = tf.get_variable(
+                            "W_baseline",
+                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 50),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            bb_baseline = tf.get_variable(
+                            "bb_baseline",
+                            (50,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
             U_baseline = tf.get_variable(
                             "U_baseline",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 1),
+                            (50, 1),
                             tf.float32,
                             self.xavier_initializer
                             )
@@ -682,7 +699,7 @@ class NER(object):
         H_t = tf.transpose(H, [1,0,2])
         Policies = []
         Baselines = []
-        with tf.variable_scope('decoder_rnn', reuse=True) as scope:
+        with tf.variable_scope('decoder_rnn') as scope:
             self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                         num_units=config.decoder_rnn_hidden_units,
                                         use_peepholes=False,
@@ -709,7 +726,8 @@ class NER(object):
                 H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
                 #forward pass for the baseline estimation
-                baseline = tf.add(tf.matmul(tf.stop_gradient(H_and_output), U_baseline), b_baseline)
+		baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W_baseline), bb_baseline))
+                baseline = tf.add(tf.matmul(baseline, U_baseline), b_baseline)
                 Baselines.append(baseline)
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
@@ -728,7 +746,10 @@ class NER(object):
                           (-1, config.max_sentence_length)
                       )
 
-            Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=10.0), axis=2)
+            #Rewards = tf.reduce_sum(Policies * tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=10.0), axis=2)
+	    Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
+	    Rewards = 2 * (Rewards - 0.5)
+	    Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
             Returns = []
@@ -742,17 +763,13 @@ class NER(object):
 
             Returns = tf.stack(Returns, axis=1)
 
-            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns-Baselines)
+            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
-            self.baseline_loss = tf.reduce_mean(tf.pow(Baselines - tf.stop_gradient(Returns), 2) * self.word_mask_placeholder) / 2.0
+            self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
             self.loss = -tf.reduce_mean(Objective_masked)
 
-            #optimizer to learn the baseline estimates
-            with tf.variable_scope("baseline_adam_optimizer"):
-                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
-        
-        return self.loss
+        return self.loss, self.baseline_loss
 
     def greedy_decoding(self, H, config):
 
