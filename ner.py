@@ -287,8 +287,6 @@ def run_NER():
         first_start = time.time()
         pretrain = True
 
-	#saver.restore(session, './pretrain_weights/ner.weights')
-
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -301,7 +299,7 @@ def run_NER():
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
-                if not pretrain:
+                if not pretrain and config.inference=="actor_decoder_rnn":
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
 
@@ -333,7 +331,7 @@ def run_NER():
                                     )
 
             print 'Training loss: {}'.format(train_loss)
-            if not pretrain: print 'Baseline Training loss: {}'.format(baseline_train_loss)
+            if not pretrain and config.inference=="actor_decoder_rnn": print 'Baseline Training loss: {}'.format(baseline_train_loss)
             save_predictions(
                             config,
                             predictions,
@@ -359,10 +357,10 @@ def run_NER():
 
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
-                if pretrain==True:
+
+                if pretrain==True and config.inference=="actor_decoder_rnn":
                     pretrain=False
                     saver.restore(session, './weights/ner.weights')
-
                     if not os.path.exists("./pretrain_weights"):
                         os.makedirs("./pretrain_weights")
                     saver.save(session, './pretrain_weights/ner.weights')
@@ -456,7 +454,7 @@ def test_NER():
 
         tf.set_random_seed(config.random_seed)
         session.run(init)
-        saver.restore(session, './pretrain_weights/ner.weights')
+        saver.restore(session, './weights/ner.weights')
         print
         print
         print 'Dev'
@@ -518,5 +516,5 @@ def test_NER():
 
 
 if __name__ == "__main__":
-  #run_NER()
-  test_NER()
+  run_NER()
+  #test_NER()

@@ -696,7 +696,7 @@ class NER(object):
         H_t = tf.transpose(H, [1,0,2])
         tag_t = tf.transpose(self.tag_placeholder, [1,0])
         Policies = []
-	Preds = []
+        Preds = []
         Baselines = []
         with tf.variable_scope('decoder_rnn') as scope:
             self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
@@ -730,7 +730,7 @@ class NER(object):
                 Baselines.append(baseline)
 
                 pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-		Preds.append(pred)
+                Preds.append(pred)
                 policy = tf.nn.softmax(pred)
 
                 def generated_tag(): return tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
@@ -741,7 +741,7 @@ class NER(object):
 
             Policies = tf.stack(Policies, axis=1)
             Baselines = tf.stack(Baselines, axis=1)
-	    Preds = tf.stack(Preds, axis=1)
+            Preds = tf.stack(Preds, axis=1)
             Baselines = tf.reshape(
                           Baselines,
                           (-1, config.max_sentence_length)

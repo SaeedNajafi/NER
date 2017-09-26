@@ -14,19 +14,19 @@ class Configuration(object):
     decoder_rnn_hidden_units = 34
     tag_embedding_size = 17
 
-    batch_size = 32
+    batch_size = 10
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 50
     early_stopping = 3
-    random_seed = 1001
+    random_seed = 11
 
     """inference type"""
     #inference = "softmax"
     #inference = "crf"
-    inference = "decoder_rnn"
-    #inference = "actor_decoder_rnn"
+    #inference = "decoder_rnn"
+    inference = "actor_decoder_rnn"
 
     """for decoding"""
     decoding="greedy"
