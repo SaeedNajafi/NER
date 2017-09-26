@@ -636,112 +636,109 @@ class NER(object):
         Defines the loss during training.
         """
 
-        #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer"):
-            tag_lookup_table = tf.get_variable(
-                                    name = "tag_lookup_table",
-                                    shape = (config.tag_size, config.tag_embedding_size),
-                                    dtype= tf.float32,
-                                    trainable= True,
-                                    initializer = self.xavier_initializer
-                                    )
+        def actor_loss(H, config):
 
-        """softmax prediction layer"""
-        with tf.variable_scope("softmax"):
-            U_softmax = tf.get_variable(
-                            "U_softmax",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b_softmax = tf.get_variable(
-                            "b_softmax",
-                            (config.tag_size,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-        with tf.variable_scope("baseline"):
-            W1_baseline = tf.get_variable(
-                            "W1_baseline",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 50),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b1_baseline = tf.get_variable(
-                            "b1_baseline",
-                            (50,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-            W2_baseline = tf.get_variable(
-                            "W2_baseline",
-                            (50, 1),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b2_baseline = tf.get_variable(
-                            "b2_baseline",
-                            (1,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-        b_size = tf.shape(H)[0]
-        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        H_t = tf.transpose(H, [1,0,2])
-        tag_t = tf.transpose(self.tag_placeholder, [1,0])
-        Policies = []
-        Preds = []
-        Baselines = []
-        with tf.variable_scope('decoder_rnn') as scope:
-            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
-                                        num_units=config.decoder_rnn_hidden_units,
-                                        use_peepholes=False,
-                                        cell_clip=None,
-                                        initializer=self.xavier_initializer,
-                                        num_proj=None,
-                                        proj_clip=None,
-                                        num_unit_shards=None,
-                                        num_proj_shards=None,
-                                        forget_bias=1.0,
-                                        state_is_tuple=True,
-                                        activation=tf.tanh
+            #we need to define a tag embedding layer.
+            with tf.variable_scope("tag_embedding_layer", reuse=True):
+                tag_lookup_table = tf.get_variable(
+                                        name = "tag_lookup_table",
+                                        shape = (config.tag_size, config.tag_embedding_size),
+                                        dtype= tf.float32,
+                                        trainable= True,
+                                        initializer = self.xavier_initializer
                                         )
 
-            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-            for time_index in range(config.max_sentence_length):
-                if time_index==0:
-                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
-                else:
-                    scope.reuse_variables()
-                    output, state = self.decoder_lstm_cell(prev_output, state)
+            """softmax prediction layer"""
+            with tf.variable_scope("softmax", reuse=True):
+                U_softmax = tf.get_variable(
+                                "U_softmax",
+                                (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
+                                tf.float32,
+                                self.xavier_initializer
+                                )
 
-                output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-                H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
+                b_softmax = tf.get_variable(
+                                "b_softmax",
+                                (config.tag_size,),
+                                tf.float32,
+                                tf.constant_initializer(0.0)
+                                )
 
-                #forward pass for the baseline estimation
-                baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
-                baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
-                Baselines.append(baseline)
+            with tf.variable_scope("baseline"):
+                W1_baseline = tf.get_variable(
+                                "W1_baseline",
+                                (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 25),
+                                tf.float32,
+                                self.xavier_initializer
+                                )
 
-                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-                Preds.append(pred)
-                policy = tf.nn.softmax(pred)
+                b1_baseline = tf.get_variable(
+                                "b1_baseline",
+                                (25,),
+                                tf.float32,
+                                tf.constant_initializer(0.0)
+                                )
 
-                def generated_tag(): return tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
-                def true_tag(): return tf.nn.embedding_lookup(tag_lookup_table, tag_t[time_index-1])
-                prev_output = tf.cond(self.pretrain_placeholder, true_tag, generated_tag)
+                W2_baseline = tf.get_variable(
+                                "W2_baseline",
+                                (25, 1),
+                                tf.float32,
+                                self.xavier_initializer
+                                )
+
+                b2_baseline = tf.get_variable(
+                                "b2_baseline",
+                                (1,),
+                                tf.float32,
+                                tf.constant_initializer(0.0)
+                                )
+
+            b_size = tf.shape(H)[0]
+            GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+            H_t = tf.transpose(H, [1,0,2])
+            Policies = []
+            Baselines = []
+            with tf.variable_scope('decoder_rnn', reuse=True) as scope:
+                self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+                                            num_units=config.decoder_rnn_hidden_units,
+                                            use_peepholes=False,
+                                            cell_clip=None,
+                                            initializer=self.xavier_initializer,
+                                            num_proj=None,
+                                            proj_clip=None,
+                                            num_unit_shards=None,
+                                            num_proj_shards=None,
+                                            forget_bias=1.0,
+                                            state_is_tuple=True,
+                                            activation=tf.tanh
+                                            )
+
+                initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+                for time_index in range(config.max_sentence_length):
+                    if time_index==0:
+                        output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
+                    else:
+                        scope.reuse_variables()
+                        output, state = self.decoder_lstm_cell(prev_output, state)
+
+                    output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                    H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
+
+                    #forward pass for the baseline estimation
+                    baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
+                    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
+                    Baselines.append(baseline)
+
+                    pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+
+                    policy = tf.nn.softmax(pred)
+                    prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
 
                 Policies.append(policy)
 
             Policies = tf.stack(Policies, axis=1)
             Baselines = tf.stack(Baselines, axis=1)
-            Preds = tf.stack(Preds, axis=1)
+
             Baselines = tf.reshape(
                           Baselines,
                           (-1, config.max_sentence_length)
@@ -766,20 +763,16 @@ class NER(object):
             Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
-        self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
-        actor_loss = -tf.reduce_mean(Objective_masked)
+            self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
+            actor_loss = -tf.reduce_mean(Objective_masked)
 
-        pretrain_loss = tf.contrib.seq2seq.sequence_loss(
-                                    logits=Preds,
-                                    targets=self.tag_placeholder,
-                                    weights=self.word_mask_placeholder,
-                                    average_across_timesteps=True,
-                                    average_across_batch=True
-                                    )
+            return actor_loss
 
-        def loss1(): return pretrain_loss
-        def loss2(): return actor_loss
+        def loss1(): return train_by_decoder_rnn(H, config)
+        def loss2(): return actor_loss(H, config)
+
         self.loss = tf.cond(self.pretrain_placeholder, loss1, loss2)
+
         return self.loss, self.baseline_loss
 
     def greedy_decoding(self, H, config):

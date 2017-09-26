@@ -47,7 +47,6 @@ def load_data(config):
                               )
 
     word_vectors = np.vstack([word_vectors, new_word_vectors])
-    
     num_to_word = dict(enumerate(words))
     word_to_num = {v:k for k,v in num_to_word.iteritems()}
 
