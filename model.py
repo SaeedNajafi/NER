@@ -768,7 +768,7 @@ class NER(object):
 
             return actor_loss
 
-        def loss1(): return train_by_decoder_rnn(H, config)
+        def loss1(): return self.train_by_decoder_rnn(H, config)
         def loss2(): return actor_loss(H, config)
 
         self.loss = tf.cond(self.pretrain_placeholder, loss1, loss2)
