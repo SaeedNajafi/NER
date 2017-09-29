@@ -775,22 +775,22 @@ class NER(object):
             	for time_index in range(config.max_sentence_length):
                     if time_index==0:
                         output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
-                	else:
+                    else:
                         scope.reuse_variables()
                         output, state = self.decoder_lstm_cell(prev_output, state)
 
-                	output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-                	H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
+                    output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                    H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
-                	#forward pass for the baseline estimation
-                	baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
-                	baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
-                	Baselines.append(baseline)
+                    #forward pass for the baseline estimation
+                    baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
+                    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
+                    Baselines.append(baseline)
 
-                	pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+                    pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
 
-                	policy = tf.nn.softmax(pred)
-                	prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
+                    policy = tf.nn.softmax(pred)
+                    prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
 
             Policies.append(policy)
 
@@ -824,7 +824,6 @@ class NER(object):
             baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
 
             actor_loss = -tf.reduce_mean(Objective_masked)
-            
             return actor_loss, baseline_loss
 
         self.loss, self.baseline_loss = tf.cond(self.pretrain_placeholder, cross_loss, actor_loss)
