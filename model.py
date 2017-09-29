@@ -635,12 +635,10 @@ class NER(object):
         Apply an actor layer in the training step.
         Defines the loss during training.
         """
-
-        def actor_loss(H, config):
-
-            #we need to define a tag embedding layer.
-            with tf.variable_scope("tag_embedding_layer", reuse=True):
-                tag_lookup_table = tf.get_variable(
+	def loss1(): return self.train_by_decoder_rnn(H, config)
+        #we need to define a tag embedding layer.
+        with tf.variable_scope("tag_embedding_layer", reuse=True):
+            tag_lookup_table = tf.get_variable(
                                         name = "tag_lookup_table",
                                         shape = (config.tag_size, config.tag_embedding_size),
                                         dtype= tf.float32,
@@ -648,58 +646,58 @@ class NER(object):
                                         initializer = self.xavier_initializer
                                         )
 
-            """softmax prediction layer"""
-            with tf.variable_scope("softmax", reuse=True):
-                U_softmax = tf.get_variable(
+        """softmax prediction layer"""
+        with tf.variable_scope("softmax", reuse=True):
+            U_softmax = tf.get_variable(
                                 "U_softmax",
                                 (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
                                 tf.float32,
                                 self.xavier_initializer
                                 )
 
-                b_softmax = tf.get_variable(
+            b_softmax = tf.get_variable(
                                 "b_softmax",
                                 (config.tag_size,),
                                 tf.float32,
                                 tf.constant_initializer(0.0)
                                 )
 
-            with tf.variable_scope("baseline"):
-                W1_baseline = tf.get_variable(
+        with tf.variable_scope("baseline"):
+            W1_baseline = tf.get_variable(
                                 "W1_baseline",
                                 (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 25),
                                 tf.float32,
                                 self.xavier_initializer
                                 )
 
-                b1_baseline = tf.get_variable(
+            b1_baseline = tf.get_variable(
                                 "b1_baseline",
                                 (25,),
                                 tf.float32,
                                 tf.constant_initializer(0.0)
                                 )
 
-                W2_baseline = tf.get_variable(
+            W2_baseline = tf.get_variable(
                                 "W2_baseline",
                                 (25, 1),
                                 tf.float32,
                                 self.xavier_initializer
                                 )
 
-                b2_baseline = tf.get_variable(
+            b2_baseline = tf.get_variable(
                                 "b2_baseline",
                                 (1,),
                                 tf.float32,
                                 tf.constant_initializer(0.0)
                                 )
 
-            b_size = tf.shape(H)[0]
-            GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-            H_t = tf.transpose(H, [1,0,2])
-            Policies = []
-            Baselines = []
-            with tf.variable_scope('decoder_rnn', reuse=True) as scope:
-                self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+        b_size = tf.shape(H)[0]
+        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        H_t = tf.transpose(H, [1,0,2])
+        Policies = []
+        Baselines = []
+        with tf.variable_scope('decoder_rnn', reuse=True) as scope:
+            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
                                             num_units=config.decoder_rnn_hidden_units,
                                             use_peepholes=False,
                                             cell_clip=None,
@@ -713,66 +711,63 @@ class NER(object):
                                             activation=tf.tanh
                                             )
 
-                initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-                for time_index in range(config.max_sentence_length):
-                    if time_index==0:
-                        output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
-                    else:
-                        scope.reuse_variables()
-                        output, state = self.decoder_lstm_cell(prev_output, state)
-
-                    output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
-                    H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
-
-                    #forward pass for the baseline estimation
-                    baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
-                    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
-                    Baselines.append(baseline)
-
-                    pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-
-                    policy = tf.nn.softmax(pred)
-                    prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
-
-                Policies.append(policy)
-
-            Policies = tf.stack(Policies, axis=1)
-            Baselines = tf.stack(Baselines, axis=1)
-
-            Baselines = tf.reshape(
-                          Baselines,
-                          (-1, config.max_sentence_length)
-                      )
-
-            Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
-            Rewards = 2 * Rewards - 1.0
-            Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
-
-            Rewards_t = tf.transpose(Rewards, [1,0])
-            Returns = []
-            zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
-            for t in range(config.max_sentence_length):
-                if t < config.max_sentence_length - 4:
-                    ret =  Rewards_t[t] + 0.9 * Rewards_t[t+1] + 0.9 * 0.9 * Rewards_t[t+2] + 0.9 * 0.9 * 0.9 * Rewards_t[t+3] + 0.9 * 0.9 * 0.9 * 0.9 * Rewards_t[t+4]
+            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+            for time_index in range(config.max_sentence_length):
+                if time_index==0:
+                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
                 else:
-                    ret = zeros
-                Returns.append(ret)
+                    scope.reuse_variables()
+                    output, state = self.decoder_lstm_cell(prev_output, state)
 
-            Returns = tf.stack(Returns, axis=1)
+                output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
-            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines)
-            Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
+                #forward pass for the baseline estimation
+                baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
+                baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
+                Baselines.append(baseline)
 
-            self.baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
-            actor_loss = -tf.reduce_mean(Objective_masked)
+                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
 
-            return actor_loss
+                policy = tf.nn.softmax(pred)
+                prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
 
-        def loss1(): return self.train_by_decoder_rnn(H, config)
-        def loss2(): return actor_loss(H, config)
+        Policies.append(policy)
+
+        Policies = tf.stack(Policies, axis=1)
+        Baselines = tf.stack(Baselines, axis=1)
+
+        Baselines = tf.reshape(
+                      Baselines,
+                      (-1, config.max_sentence_length)
+                  )
+
+        Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
+        Rewards = 2 * Rewards - 1.0
+        Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
+
+        Rewards_t = tf.transpose(Rewards, [1,0])
+        Returns = []
+        zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
+        for t in range(config.max_sentence_length):
+            if t < config.max_sentence_length - 4:
+                ret =  Rewards_t[t] + 0.9 * Rewards_t[t+1] + 0.9 * 0.9 * Rewards_t[t+2] + 0.9 * 0.9 * 0.9 * Rewards_t[t+3] + 0.9 * 0.9 * 0.9 * 0.9 * Rewards_t[t+4]
+            else:
+                ret = zeros
+            Returns.append(ret)
+
+        Returns = tf.stack(Returns, axis=1)
+
+        Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines)
+        Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
+
+        actor_loss = -tf.reduce_mean(Objective_masked)
+
+
+        def loss2(): return actor_loss
 
         self.loss = tf.cond(self.pretrain_placeholder, loss1, loss2)
-
+	self.baseline_loss = tf.divide(tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder), 2.0)
         return self.loss, self.baseline_loss
 
     def greedy_decoding(self, H, config):
