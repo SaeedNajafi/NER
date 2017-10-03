@@ -96,8 +96,6 @@ class NER(object):
 
         self.pretrain_placeholder = tf.placeholder(dtype=tf.bool, shape=())
 
-        self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
-
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -108,7 +106,6 @@ class NER(object):
                         sentence_length_batch,
                         dropout_batch,
                         pretrain,
-                        alpha,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -129,7 +126,6 @@ class NER(object):
             self.sentence_length_placeholder: sentence_length_batch,
             self.dropout_placeholder: dropout_batch,
             self.pretrain_placeholder: pretrain
-            self.alpha_placeholder: alpha
             }
 
         if tag_batch is not None:
@@ -789,7 +785,6 @@ class NER(object):
 
                     #forward pass for the baseline estimation
                     baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
-                    baseline_dropped = tf.nn.dropout(baseline, self.dropout_placeholder)
                     baseline = tf.add(tf.matmul(baseline_dropped, W2_baseline), b2_baseline)
                     Baselines.append(baseline)
 
