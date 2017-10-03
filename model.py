@@ -806,11 +806,12 @@ class NER(object):
             Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * Rewards - 1.0
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
+            Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
             Baselines_t = tf.transpose(Baselines, [1,0])
             Returns = []
-            gamma = 0.9
+            gamma = 0.7
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
                 if t < config.max_sentence_length - 5:
