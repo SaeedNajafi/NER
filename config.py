@@ -25,8 +25,8 @@ class Configuration(object):
     """inference type"""
     #inference = "softmax"
     #inference = "crf"
-    inference = "decoder_rnn"
-    #inference = "actor_decoder_rnn"
+    #inference = "decoder_rnn"
+    inference = "actor_decoder_rnn"
 
     """for decoding"""
     decoding="greedy"

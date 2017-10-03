@@ -96,6 +96,8 @@ class NER(object):
 
         self.pretrain_placeholder = tf.placeholder(dtype=tf.bool, shape=())
 
+        self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -106,6 +108,7 @@ class NER(object):
                         sentence_length_batch,
                         dropout_batch,
                         pretrain,
+                        alpha,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -125,7 +128,8 @@ class NER(object):
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
             self.dropout_placeholder: dropout_batch,
-            self.pretrain_placeholder: pretrain
+            self.pretrain_placeholder: pretrain,
+            self.alpha_placeholder: alpha
             }
 
         if tag_batch is not None:
@@ -635,6 +639,7 @@ class NER(object):
         Apply an actor layer in the training step.
         Defines the loss during training.
         """
+
         b_size = tf.shape(H)[0]
         #we need to define a tag embedding layer.
         with tf.variable_scope("tag_embedding_layer"):
@@ -784,13 +789,13 @@ class NER(object):
 
                     #forward pass for the baseline estimation
                     baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
-                    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
+		    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
                     Baselines.append(baseline)
 
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
 
                     policy = tf.nn.softmax(pred)
-                    prev_output = tf.matmul(tf.nn.softmax(10000 * pred), tag_lookup_table)
+                    prev_output = tf.matmul(tf.nn.softmax(self.alpha_placeholder * pred), tag_lookup_table)
 
             Policies.append(policy)
 
@@ -807,11 +812,13 @@ class NER(object):
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
+            Baselines_t = tf.transpose(Baselines, [1,0])
             Returns = []
+            gamma = 0.9
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
-                if t < config.max_sentence_length - 4:
-                    ret =  Rewards_t[t] + 0.9 * Rewards_t[t+1] + 0.9 * 0.9 * Rewards_t[t+2] + 0.9 * 0.9 * 0.9 * Rewards_t[t+3] + 0.9 * 0.9 * 0.9 * 0.9 * Rewards_t[t+4]
+                if t < config.max_sentence_length - 3:
+                    ret =  Rewards_t[t] + gamma * Rewards_t[t+1] + (gamma**2) * Rewards_t[t+2] + (gamma**3) * Baselines_t[t+3]
                 else:
                     ret = zeros
                 Returns.append(ret)
