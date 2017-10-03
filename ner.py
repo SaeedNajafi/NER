@@ -15,7 +15,6 @@ def run_epoch(
             config,
             model,
             pretrain,
-            alpha,
             session,
             char_X,
             word_length_X,
@@ -61,7 +60,6 @@ def run_epoch(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
                     pretrain = pretrain,
-                    alpha = alpha,
                     tag_batch= tag_data
                 )
 
@@ -165,7 +163,6 @@ def predict(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
                     pretrain = False,
-                    alpha = 1000000
                     tag_batch=tag_data
                 )
 
@@ -289,8 +286,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = False
-        saver.save(session, './pretrain_weights/ner.weights')
-        alpha = 1.0
+        saver.restore(session, './reinforce_rnn/exp5-2/pretrain_weights/ner.weights')
 
         for epoch in xrange(config.max_epochs):
             print
@@ -312,7 +308,7 @@ def run_NER():
                                                     config,
                                                     model,
                                                     pretrain,
-                                                    alpha
+                                                    alpha,
                                                     session,
                                                     data['train_data']['char_X'],
                                                     data['train_data']['word_length_X'],
@@ -360,10 +356,7 @@ def run_NER():
                 if not os.path.exists("./weights"):
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
-
-            if not pretrain and config.inference=="actor_decoder_rnn":
-                alpha = np.minimum(alpha * 10.0, 1000000.0)
-
+            
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
 
@@ -464,7 +457,6 @@ def test_NER():
         tf.set_random_seed(config.random_seed)
         session.run(init)
         saver.restore(session, './pretrain_weights/ner.weights')
-
         print
         print
         print 'Dev'

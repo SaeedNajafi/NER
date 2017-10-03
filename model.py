@@ -785,13 +785,13 @@ class NER(object):
 
                     #forward pass for the baseline estimation
                     baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
-                    baseline = tf.add(tf.matmul(baseline_dropped, W2_baseline), b2_baseline)
+                    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
                     Baselines.append(baseline)
 
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
 
                     policy = tf.nn.softmax(pred)
-                    prev_output = tf.matmul(tf.nn.softmax(self.alpha_placeholder * pred), tag_lookup_table)
+                    prev_output = tf.matmul(tf.nn.softmax(1000.0 * pred), tag_lookup_table)
 
             Policies.append(policy)
 
@@ -813,8 +813,8 @@ class NER(object):
             gamma = 0.9
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
-                if t < config.max_sentence_length - 3:
-                    ret =  Rewards_t[t] + gamma * Rewards_t[t+1] + (gamma**2) * Rewards_t[t+2] + (gamma**3) * Baselines_t[t+3]
+                if t < config.max_sentence_length - 5:
+                    ret =  Rewards_t[t] + gamma * Rewards_t[t+1] + (gamma**2) * Rewards_t[t+2] + (gamma**3) * Rewards_t[t+3] + (gamma**4) * Rewards_t[t+4] + (gamma**5) * Baselines_t[t+5]
                 else:
                     ret = zeros
                 Returns.append(ret)

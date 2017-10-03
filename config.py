@@ -20,7 +20,7 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 50
     early_stopping = 3
-    random_seed = 11
+    random_seed = 100001
 
     """inference type"""
     #inference = "softmax"
