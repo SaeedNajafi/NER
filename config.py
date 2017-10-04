@@ -19,8 +19,8 @@ class Configuration(object):
     learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 50
-    early_stopping = 3
-    random_seed = 100001
+    early_stopping = 2
+    random_seed = 11
 
     """inference type"""
     #inference = "softmax"

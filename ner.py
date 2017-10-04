@@ -286,7 +286,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = False
-        saver.restore(session, './reinforce_rnn/exp5-2/pretrain_weights/ner.weights')
+        saver.restore(session, './reinforce_rnn/exp1-1/pretrain_weights/ner.weights')
 
         for epoch in xrange(config.max_epochs):
             print
@@ -308,7 +308,6 @@ def run_NER():
                                                     config,
                                                     model,
                                                     pretrain,
-                                                    alpha,
                                                     session,
                                                     data['train_data']['char_X'],
                                                     data['train_data']['word_length_X'],
