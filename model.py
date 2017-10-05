@@ -822,7 +822,7 @@ class NER(object):
 
             Returns = tf.stack(Returns, axis=1)
 
-            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines)
+            Objective = tf.log(tf.reduce_logsumexp(1000.0 * Policies, axis=2) / 1000.0) * tf.stop_gradient(Returns - Baselines)
 	    Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0

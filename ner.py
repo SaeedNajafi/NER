@@ -1,3 +1,4 @@
+
 from config import Configuration
 from model import NER
 from load_data import load_data
@@ -286,7 +287,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = False
-        saver.restore(session, './reinforce_rnn/exp1-1/pretrain_weights/ner.weights')
+        saver.restore(session, './reinforce_rnn/exp2-2/pretrain_weights/ner.weights')
 
         for epoch in xrange(config.max_epochs):
             print
@@ -355,7 +356,6 @@ def run_NER():
                 if not os.path.exists("./weights"):
                     os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
-            
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
 
@@ -455,7 +455,7 @@ def test_NER():
 
         tf.set_random_seed(config.random_seed)
         session.run(init)
-        saver.restore(session, './pretrain_weights/ner.weights')
+        saver.restore(session, './weights/ner.weights')
         print
         print
         print 'Dev'
@@ -479,7 +479,7 @@ def test_NER():
                         config,
                         predictions,
                         data['dev_data']['sentence_length_X'],
-                        "cross.dev.predicted",
+                        "dev.predicted",
                         data['dev_data']['word_X'],
                         data['dev_data']['Y'],
                         data['num_to_tag'],
@@ -508,7 +508,7 @@ def test_NER():
                         config,
                         predictions,
                         data['test_data']['sentence_length_X'],
-                        "cross.test.predicted",
+                        "test.predicted",
                         data['test_data']['word_X'],
                         data['test_data']['Y'],
                         data['num_to_tag'],
