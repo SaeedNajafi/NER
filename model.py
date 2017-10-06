@@ -799,9 +799,9 @@ class NER(object):
             Baselines = tf.stack(Baselines, axis=1)
 
             Baselines = tf.reshape(
-                      Baselines,
-                      (-1, config.max_sentence_length)
-                  )
+                      		Baselines,
+                      		(-1, config.max_sentence_length)
+                  	)
 
             Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * Rewards - 1.0
