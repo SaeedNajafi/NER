@@ -14,7 +14,7 @@ def load_data(config):
                                       config.word_dic_path,
                                       config.word_vectors_path
                                       )
-                                      
+    '''                                      
     #Adding new words of the training set and their random vectors.
     print "INFO: Adding new words of the training set!"
     new_words = []
@@ -47,6 +47,7 @@ def load_data(config):
                               )
 
     word_vectors = np.vstack([word_vectors, new_word_vectors])
+    '''    
     num_to_word = dict(enumerate(words))
     word_to_num = {v:k for k,v in num_to_word.iteritems()}
 
