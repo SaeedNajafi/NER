@@ -766,7 +766,7 @@ class NER(object):
             return cross_loss, b2_baseline
 
         def actor_loss():
-            b_size = tf.shape(H)[0]
+            
             GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
             H_t = tf.transpose(H, [1,0,2])
             Policies = []
@@ -806,7 +806,7 @@ class NER(object):
             Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * Rewards - 1.0
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
-	    Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
+            Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
             Baselines_t = tf.transpose(Baselines, [1,0])
@@ -823,7 +823,7 @@ class NER(object):
             Returns = tf.stack(Returns, axis=1)
 
             Objective = tf.log(tf.reduce_logsumexp(10000.0 * Policies, axis=2) / 10000.0) * tf.stop_gradient(Returns - Baselines)
-	    Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
+            Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
 

@@ -287,6 +287,7 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = True
+
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
@@ -298,16 +299,16 @@ def run_NER():
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
-	    '''
-	    if epoch!=0 and epoch%3==0:
-		optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+            '''
+            if epoch!=0 and epoch%3==0:
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
-		pretrain=True
-	    else:
-		optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                pretrain=True
+            else:
+                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
-		pretrain=False
-	    '''
+                pretrain=False
+            '''
 
             train_loss , baseline_train_loss = run_epoch(
                                                     config,
@@ -360,6 +361,7 @@ def run_NER():
                 if not os.path.exists("./pretrain_weights"):
                 	os.makedirs("./pretrain_weights")
                 saver.save(session, './pretrain_weights/ner.weights')
+
             # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
             	break
