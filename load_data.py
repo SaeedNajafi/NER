@@ -14,7 +14,6 @@ def load_data(config):
                                       config.word_dic_path,
                                       config.word_vectors_path
                                       )
-                                      
     #Adding new words of the training set and their random vectors.
     print "INFO: Adding new words of the training set!"
     new_words = []

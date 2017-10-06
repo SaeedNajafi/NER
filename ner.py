@@ -287,23 +287,31 @@ def run_NER():
         session.run(init)
         first_start = time.time()
         pretrain = False
-        saver.restore(session, './reinforce_rnn/exp2-2/pretrain_weights/ner.weights')
-
+        saver.restore(session, './reinforce_rnn/exp1/pretrain_weights/ner.weights')
         for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
 
             start = time.time()
             ###
-
             #manually reseting adam optimizer
-            if(epoch==8 or epoch==16 or epoch==24 or epoch==32 or epoch==40 or epoch==48):
+	    '''
+            if(epoch==4 or epoch==8 or epoch==12 or epoch==16 or epoch==20 or epoch==24):
                 optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                 session.run(tf.variables_initializer(optimizer_scope))
 
                 if not pretrain and config.inference=="actor_decoder_rnn":
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "baseline_adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
+	    '''
+	    if epoch!=0 and epoch%3==0:
+		optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
+		pretrain=True
+	    else:
+		optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                session.run(tf.variables_initializer(optimizer_scope))
+		pretrain=False
 
             train_loss , baseline_train_loss = run_epoch(
                                                     config,
@@ -353,28 +361,17 @@ def run_NER():
             if  val_fscore_loss < best_val_loss:
                 best_val_loss = val_fscore_loss
                 best_val_epoch = epoch
+		if not pretrain:
+                	if not os.path.exists("./reinforce_weights"):
+                    		os.makedirs("./reinforce_weights")
+                	saver.save(session, './reinforce_weights/ner.weights')
                 if not os.path.exists("./weights"):
-                    os.makedirs("./weights")
+                	os.makedirs("./weights")
                 saver.save(session, './weights/ner.weights')
-            # For early stopping which is kind of regularization for network.
+	    # For early stopping which is kind of regularization for network.
             if epoch - best_val_epoch > config.early_stopping:
-
-                if pretrain==True and config.inference=="actor_decoder_rnn":
-                    pretrain=False
-                    saver.restore(session, './weights/ner.weights')
-                    if not os.path.exists("./pretrain_weights"):
-                        os.makedirs("./pretrain_weights")
-                    saver.save(session, './pretrain_weights/ner.weights')
-
-                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                    session.run(tf.variables_initializer(optimizer_scope))
-
-                    best_val_loss = float('inf')
-                    best_val_epoch = epoch + 1
-                    continue
-                else:
-                    break
-                    ###
+            	break
+                ###
 
             print 'Epoch training time: {} seconds'.format(time.time() - start)
 

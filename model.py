@@ -791,7 +791,7 @@ class NER(object):
                     pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
 
                     policy = tf.nn.softmax(pred)
-                    prev_output = tf.matmul(tf.nn.softmax(1000.0 * pred), tag_lookup_table)
+                    prev_output = tf.matmul(tf.nn.softmax(10000.0 * pred), tag_lookup_table)
 
             Policies.append(policy)
 
@@ -799,9 +799,9 @@ class NER(object):
             Baselines = tf.stack(Baselines, axis=1)
 
             Baselines = tf.reshape(
-                      Baselines,
-                      (-1, config.max_sentence_length)
-                  )
+                      		Baselines,
+                      		(-1, config.max_sentence_length)
+                  	)
 
             Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * Rewards - 1.0
@@ -811,7 +811,7 @@ class NER(object):
             Rewards_t = tf.transpose(Rewards, [1,0])
             Baselines_t = tf.transpose(Baselines, [1,0])
             Returns = []
-            gamma = 0.7
+            gamma = 0.5
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
                 if t < config.max_sentence_length - 5:
@@ -822,7 +822,7 @@ class NER(object):
 
             Returns = tf.stack(Returns, axis=1)
 
-            Objective = tf.log(tf.reduce_logsumexp(1000.0 * Policies, axis=2) / 1000.0) * tf.stop_gradient(Returns - Baselines)
+            Objective = tf.log(tf.reduce_logsumexp(10000.0 * Policies, axis=2) / 1000.0) * tf.stop_gradient(Returns - Baselines)
 	    Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
