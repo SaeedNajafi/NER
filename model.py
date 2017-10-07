@@ -766,7 +766,6 @@ class NER(object):
             return cross_loss, b2_baseline
 
         def actor_loss():
-            
             GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
             H_t = tf.transpose(H, [1,0,2])
             Policies = []
@@ -784,7 +783,7 @@ class NER(object):
                     H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
                     #forward pass for the baseline estimation
-                    baseline = tf.tanh(tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline))
+                    baseline = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline)
                     baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
                     Baselines.append(baseline)
 
@@ -801,17 +800,19 @@ class NER(object):
             Baselines = tf.reshape(
                       		Baselines,
                       		(-1, config.max_sentence_length)
-                  	)
+			)
 
-            Rewards = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
-            Rewards = 2 * Rewards - 1.0
+            is_true_tag = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
+            Rewards = 2 * is_true_tag - 1.0
+	    true_prob = tf.reduce_sum(tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=1.0, dtype=tf.float32) * Policies, axis=2)
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
             Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
             Baselines_t = tf.transpose(Baselines, [1,0])
             Returns = []
-            gamma = 0.5
+            gamma = 0.6
+	    beta = 0.01
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
                 if t < config.max_sentence_length - 5:
@@ -822,7 +823,7 @@ class NER(object):
 
             Returns = tf.stack(Returns, axis=1)
 
-            Objective = tf.log(tf.reduce_logsumexp(10000.0 * Policies, axis=2) / 10000.0) * tf.stop_gradient(Returns - Baselines)
+            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines) + beta * tf.stop_gradient(1 - is_true_tag) * tf.log(true_prob) 
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
