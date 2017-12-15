@@ -580,7 +580,7 @@ class NER(object):
             #b_V is just a dummy loss added for coding purpose.
             return cross_loss, b_V
 
-        def actor_critic_loss():
+        def actor_critic():
             H_t = tf.transpose(H, [1,0,2])
             Policies = []
             V = []
@@ -649,7 +649,7 @@ class NER(object):
             actor_critic_loss = -tf.reduce_mean(tf.reduce_mean(Objective_masked, axis=1), axis=0)
             return actor_critic_loss, V_loss
 
-        self.loss, self.V_loss = tf.cond(self.pretrain_placeholder, cross_loss, actor_critic_loss)
+        self.loss, self.V_loss = tf.cond(self.pretrain_placeholder, maximum_likelihood, actor_critic)
 
         return self.loss, self.V_loss
 

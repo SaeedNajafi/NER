@@ -24,9 +24,9 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 3
     early_stopping = 2
-
-    """inference type"""
-    inference = "crf"
-    #inference = "actor_critic_rnn"
-    #gamma = 0.7
-    #n_step = 3
+    runs=30
+    gamma = 0.7
+    n_step = 3
+    
+    # will be updated!
+    inference = None

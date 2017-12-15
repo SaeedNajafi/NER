@@ -252,53 +252,93 @@ def eval_fscore():
     result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
     return float(result_lines[1].strip().split()[-1])
 
-def run_NER():
-    """run NER model implementation.
-    """
-    config = Configuration()
-    data = load_data(config)
-    model = NER(config, data['word_vectors'], data['char_vectors'])
-    init = tf.global_variables_initializer()
-    saver = tf.train.Saver()
+def model_run(config, data, pretrain, model_name):
+    for i in range(config.runs):
+        run = i + 1
+        tf.set_random_seed(run**2)
+        model = NER(config, data['word_vectors'], data['char_vectors'])
+        init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
+        with tf.Session() as session:
+            best_val_loss = float('inf')
+            best_val_epoch = 0
+            session.run(init)
+            if model_name=='AC-RNN':
+                saver.restore(session, './results/' + 'RNN' + '.' + str(run) + '.' + 'weights')
 
-    with tf.Session() as session:
-        best_val_loss = float('inf')
-        best_val_epoch = 0
-        tf.set_random_seed(1000)
+            first_start = time.time()
+            for epoch in xrange(config.max_epochs):
 
-        session.run(init)
-        first_start = time.time()
-        pretrain = True
-        #saver.restore(session, './reinforce_rnn/exp5-2/pretrain_weights/ner.weights')
-        #optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-        #session.run(tf.variables_initializer(optimizer_scope))
-        for epoch in xrange(config.max_epochs):
-            print
-            print 'Epoch {}'.format(epoch)
+                if model_name=='AC-RNN' and epoch%3==2:
+                    pretrain=True
+                elif model_name=='AC-RNN'and (epoch%3==1 or epoch%3==0):
+                    pretrain=False
 
+                print '<model: {}>, <run: {}>'.format(model_name, run)
+                print 'Epoch {}'.format(epoch)
+                start = time.time()
+                train_loss , V_train_loss = run_epoch(
+                                                        config,
+                                                        model,
+                                                        pretrain,
+                                                        session,
+                                                        data['train_data']['char_X'],
+                                                        data['train_data']['word_length_X'],
+                                                        data['train_data']['cap_X'],
+                                                        data['train_data']['word_X'],
+                                                        data['train_data']['mask_X'],
+                                                        data['train_data']['sentence_length_X'],
+                                                        data['train_data']['Y']
+                                                        )
+
+                _ , predictions = predict(
+                                        config,
+                                        model,
+                                        session,
+                                        data['dev_data']['char_X'],
+                                        data['dev_data']['word_length_X'],
+                                        data['dev_data']['cap_X'],
+                                        data['dev_data']['word_X'],
+                                        data['dev_data']['mask_X'],
+                                        data['dev_data']['sentence_length_X'],
+                                        data['dev_data']['Y']
+                                        )
+
+                print '<model: {}>, <run: {}>'.format(model_name, run)
+                print 'Training loss: {}'.format(train_loss)
+                if not pretrain and config.inference=="actor_critic_rnn": print 'V Training loss: {}'.format(V_train_loss)
+                save_predictions(
+                                config,
+                                predictions,
+                                data['dev_data']['sentence_length_X'],
+                                "temp.predicted",
+                                data['dev_data']['word_X'],
+                                data['dev_data']['Y'],
+                                data['num_to_tag'],
+                                data['num_to_word']
+                                )
+
+                val_fscore_loss = 100.0 - eval_fscore()
+                print 'Validation fscore loss: {}'.format(val_fscore_loss)
+
+                if  val_fscore_loss < best_val_loss:
+                    best_val_loss = val_fscore_loss
+                    best_val_epoch = epoch
+                    saver.save(session, './results/' + model_name + '.' + str(run) + '.' + 'weights')
+
+                # For early stopping which is kind of regularization for network.
+                if epoch - best_val_epoch > config.early_stopping:
+                    break
+                    ###
+
+                print 'Epoch training time: {} seconds'.format(time.time() - start)
+
+            print 'Total training time: {} seconds'.format(time.time() - first_start)
+
+            saver.restore(session, './results/' + model_name + '.' + str(run) + '.' + 'weights')
+            print '<model: {}>, <run: {}>'.format(model_name, run)
+            print 'Dev'
             start = time.time()
-            ###
-            '''
-            if epoch==0 or epoch%3!=0:
-                pretrain=False
-            else:
-                pretrain=True
-            '''
-
-            train_loss , V_train_loss = run_epoch(
-                                                    config,
-                                                    model,
-                                                    pretrain,
-                                                    session,
-                                                    data['train_data']['char_X'],
-                                                    data['train_data']['word_length_X'],
-                                                    data['train_data']['cap_X'],
-                                                    data['train_data']['word_X'],
-                                                    data['train_data']['mask_X'],
-                                                    data['train_data']['sentence_length_X'],
-                                                    data['train_data']['Y']
-                                                    )
-
             _ , predictions = predict(
                                     config,
                                     model,
@@ -311,175 +351,74 @@ def run_NER():
                                     data['dev_data']['sentence_length_X'],
                                     data['dev_data']['Y']
                                     )
-
-            print 'Training loss: {}'.format(train_loss)
-            if not pretrain and config.inference=="actor_critic_rnn": print 'V Training loss: {}'.format(V_train_loss)
+            print 'Total prediction time: {} seconds'.format(time.time() - start)
+            print 'Writing predictions to dev.predicted'
             save_predictions(
                             config,
                             predictions,
                             data['dev_data']['sentence_length_X'],
-                            "temp.predicted",
+                            './results/' + model_name + '.' + str(run) + '.' + "dev.predicted",
                             data['dev_data']['word_X'],
                             data['dev_data']['Y'],
                             data['num_to_tag'],
                             data['num_to_word']
                             )
+            print
+            print 'Test'
+            start = time.time()
+            _ , predictions = predict(
+                                    config,
+                                    model,
+                                    session,
+                                    data['test_data']['char_X'],
+                                    data['test_data']['word_length_X'],
+                                    data['test_data']['cap_X'],
+                                    data['test_data']['word_X'],
+                                    data['test_data']['mask_X'],
+                                    data['test_data']['sentence_length_X'],
+                                    data['test_data']['Y']
+                                    )
 
-            val_fscore_loss = 100.0 - eval_fscore()
-            print 'Validation fscore loss: {}'.format(val_fscore_loss)
-
-            if  val_fscore_loss < best_val_loss:
-                best_val_loss = val_fscore_loss
-                best_val_epoch = epoch
-                if not os.path.exists("./weights"):
-                	os.makedirs("./weights")
-                saver.save(session, './weights/ner.weights')
-
-            # For early stopping which is kind of regularization for network.
-            if epoch - best_val_epoch > config.early_stopping:
-            	break
-                ###
-
-            print 'Epoch training time: {} seconds'.format(time.time() - start)
-
-        print 'Total training time: {} seconds'.format(time.time() - first_start)
-
-        saver.restore(session, './weights/ner.weights')
-        print
-        print
-        print 'Dev'
-        start = time.time()
-        _ , predictions = predict(
-                                config,
-                                model,
-                                session,
-                                data['dev_data']['char_X'],
-                                data['dev_data']['word_length_X'],
-                                data['dev_data']['cap_X'],
-                                data['dev_data']['word_X'],
-                                data['dev_data']['mask_X'],
-                                data['dev_data']['sentence_length_X'],
-                                data['dev_data']['Y']
-                                )
-
-        print 'Total prediction time: {} seconds'.format(time.time() - start)
-        print 'Writing predictions to dev.predicted'
-        save_predictions(
-                        config,
-                        predictions,
-                        data['dev_data']['sentence_length_X'],
-                        "dev.predicted",
-                        data['dev_data']['word_X'],
-                        data['dev_data']['Y'],
-                        data['num_to_tag'],
-                        data['num_to_word']
-                        )
-        print
-        print
-        print 'Test'
-        start = time.time()
-        _ , predictions = predict(
-                                config,
-                                model,
-                                session,
-                                data['test_data']['char_X'],
-                                data['test_data']['word_length_X'],
-                                data['test_data']['cap_X'],
-                                data['test_data']['word_X'],
-                                data['test_data']['mask_X'],
-                                data['test_data']['sentence_length_X'],
-                                data['test_data']['Y']
-                                )
-
-        print 'Total prediction time: {} seconds'.format(time.time() - start)
-        print 'Writing predictions to test.predicted'
-        save_predictions(
-                        config,
-                        predictions,
-                        data['test_data']['sentence_length_X'],
-                        "test.predicted",
-                        data['test_data']['word_X'],
-                        data['test_data']['Y'],
-                        data['num_to_tag'],
-                        data['num_to_word']
-                        )
-
-def test_NER():
-    """test NER model.
+            print 'Total prediction time: {} seconds'.format(time.time() - start)
+            print 'Writing predictions to test.predicted'
+            save_predictions(
+                            config,
+                            predictions,
+                            data['test_data']['sentence_length_X'],
+                            './results/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                            data['test_data']['word_X'],
+                            data['test_data']['Y'],
+                            data['num_to_tag'],
+                            data['num_to_word']
+                            )
+    return
+def run_NER():
+    """run NER model implementation.
     """
     config = Configuration()
-    np.random.seed(config.random_seed)
     data = load_data(config)
-    model = NER(config, data['word_vectors'], data['char_vectors'])
 
-    init = tf.global_variables_initializer()
-    saver = tf.train.Saver()
+    path = "./results"
+    if not os.path.exists(path):
+        os.makedirs(path)
 
-    with tf.Session() as session:
+    "CRF"
+    pretrain = True
+    model_name = "crf"
+    config.inference = "crf"
+    model_run(config, data, pretrain, model_name)
 
-        tf.set_random_seed(config.random_seed)
-        session.run(init)
-        saver.restore(session, './weights/ner.weights')
-        print
-        print
-        print 'Dev'
-        start = time.time()
-        _ , predictions = predict(
-                                config,
-                                model,
-                                session,
-                                data['dev_data']['char_X'],
-                                data['dev_data']['word_length_X'],
-                                data['dev_data']['cap_X'],
-                                data['dev_data']['word_X'],
-                                data['dev_data']['mask_X'],
-                                data['dev_data']['sentence_length_X'],
-                                data['dev_data']['Y']
-                                )
+    "RNN"
+    pretrain = True
+    model_name = "rnn"
+    config.inference = "actor_critic_rnn"
+    model_run(config, data, pretrain, model_name)
 
-        print 'Total prediction time: {} seconds'.format(time.time() - start)
-        print 'Writing predictions to dev.predicted'
-        save_predictions(
-                        config,
-                        predictions,
-                        data['dev_data']['sentence_length_X'],
-                        "dev.predicted",
-                        data['dev_data']['word_X'],
-                        data['dev_data']['Y'],
-                        data['num_to_tag'],
-                        data['num_to_word']
-                        )
-        print
-        print
-        print 'Test'
-        start = time.time()
-        _ , predictions = predict(
-                                config,
-                                model,
-                                session,
-                                data['test_data']['char_X'],
-                                data['test_data']['word_length_X'],
-                                data['test_data']['cap_X'],
-                                data['test_data']['word_X'],
-                                data['test_data']['mask_X'],
-                                data['test_data']['sentence_length_X'],
-                                data['test_data']['Y']
-                                )
-
-        print 'Total prediction time: {} seconds'.format(time.time() - start)
-        print 'Writing predictions to test.predicted'
-        save_predictions(
-                        config,
-                        predictions,
-                        data['test_data']['sentence_length_X'],
-                        "test.predicted",
-                        data['test_data']['word_X'],
-                        data['test_data']['Y'],
-                        data['num_to_tag'],
-                        data['num_to_word']
-                        )
-
+    "AC-RNN"
+    pretrain = False
+    model_name = "AC-RNN"
+    config.inference = "actor_critic_rnn"
+    model_run(config, data, pretrain, model_name)
 
 if __name__ == "__main__":
   run_NER()
-  #test_NER()
