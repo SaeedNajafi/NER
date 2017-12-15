@@ -253,10 +253,10 @@ def eval_fscore():
     return float(result_lines[1].strip().split()[-1])
 
 def model_run(config, data, pretrain, model_name):
+    model = NER(config, data['word_vectors'], data['char_vectors'])
     for i in range(config.runs):
         run = i + 1
         tf.set_random_seed(run**2)
-        model = NER(config, data['word_vectors'], data['char_vectors'])
         init = tf.global_variables_initializer()
         saver = tf.train.Saver()
         with tf.Session() as session:
@@ -274,7 +274,7 @@ def model_run(config, data, pretrain, model_name):
                 elif model_name=='AC-RNN'and (epoch%3==1 or epoch%3==0):
                     pretrain=False
 
-                print '<model: {}>, <run: {}>'.format(model_name, run)
+                print
                 print 'Epoch {}'.format(epoch)
                 start = time.time()
                 train_loss , V_train_loss = run_epoch(
