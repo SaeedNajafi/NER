@@ -258,7 +258,7 @@ def run_model():
     path = "./results"
     if not os.path.exists(path):
         os.makedirs(path)
-    model = NER(config, data['word_vectors'], data['char_vectors'])
+    model = NER(config, data['word_vectors'])
 
     pretrain = True
     if config.inference=="AC-RNN":
