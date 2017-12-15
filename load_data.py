@@ -7,7 +7,6 @@ def load_data(config):
     Loads starter word vectors, creates random character vectors,
     and loads train/dev/test data.
     """
-
     #Loads the starter word vectors
     print "INFO: Reading word embeddings!"
     word_vectors, words = ut.load_embeddings(
@@ -15,38 +14,6 @@ def load_data(config):
                                       config.word_vectors_path
                                       )
 
-    #Adding new words of the training set and their random vectors.
-    print "INFO: Adding new words of the training set!"
-    new_words = []
-    temp_dic = {}
-    with open(config.train_set_path) as fd:
-        for line in fd:
-            if re.match(r"-DOCSTART-.+", line) or (len(line.strip()) == 0):
-                continue
-            else:
-                word = line.strip().split("\t")[0]
-                if (word not in words) and (word.lower() not in words):
-                    if re.search(r'\d', word) is None:
-                        if word in temp_dic.keys():
-                            temp_dic[word] += 1
-                        else:
-                            temp_dic[word] = 1
-
-    for (new_word, count) in sorted(temp_dic.items(), key=lambda item:item[1]):
-        if count>2:
-            new_words.append(new_word)
-
-    words = words + new_words
-
-    #Initializing new word vectors!
-    boundry = np.sqrt(np.divide(3.0, config.word_embedding_size))
-    new_word_vectors = np.random.uniform(
-                              low=-boundry,
-                              high=boundry,
-                              size=(len(new_words), config.word_embedding_size)
-                              )
-
-    word_vectors = np.vstack([word_vectors, new_word_vectors])
     num_to_word = dict(enumerate(words))
     word_to_num = {v:k for k,v in num_to_word.iteritems()}
 
@@ -59,6 +26,7 @@ def load_data(config):
 
     num_to_char = dict(enumerate(chars))
     char_to_num = {v:k for k,v in num_to_char.iteritems()}
+
     boundry = np.sqrt(np.divide(3.0, config.char_embedding_size))
     char_vectors = np.random.uniform(
                             low=-boundry,

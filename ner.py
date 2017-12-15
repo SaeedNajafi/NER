@@ -29,7 +29,7 @@ def run_epoch(
 
     # We're interested in keeping track of the loss during training
     total_loss = []
-    baseline_total_loss = []
+    V_total_loss = []
     total_steps = int(np.ceil(len(word_X) / float(config.batch_size)))
     data = ut.data_iterator(
                 char_X,
@@ -81,16 +81,16 @@ def run_epoch(
                 sys.stdout.flush()
 
         else:
-            baseline_loss, loss, _, _ = session.run([model.baseline_loss, model.loss, model.baseline_train_op, model.train_op], feed_dict=feed)
+            V_loss, loss, _, _ = session.run([model.V_loss, model.loss, model.V_train_op, model.train_op], feed_dict=feed)
             total_loss.append(loss)
-            baseline_total_loss.append(baseline_loss)
+            V_total_loss.append(V_loss)
             ##
             if verbose and step % verbose == 0:
                 sys.stdout.write('\r{} / {} : loss = {}  |  baseline loss = {}'.format(
                                                             step,
                                                             total_steps,
                                                             np.mean(total_loss),
-                                                            np.mean(baseline_total_loss)
+                                                            np.mean(V_total_loss)
                                                             )
                                 )
                 sys.stdout.flush()
@@ -101,7 +101,7 @@ def run_epoch(
     if pretrain:
         return np.mean(total_loss), 0
     else:
-        return np.mean(total_loss), np.mean(baseline_total_loss)
+        return np.mean(total_loss), np.mean(V_total_loss)
 
 def predict(
         config,
@@ -203,23 +203,7 @@ def predict(
 
             results.append(inner_results)
 
-        elif config.inference=="softmax":
-
-            if np.any(tag_data):
-                feed[model.tag_placeholder] = tag_data
-                loss, preds = session.run(
-                                        [model.loss, model.predictions],
-                                        feed_dict=feed
-                                        )
-                losses.append(loss)
-            else:
-                preds = session.run(model.predictions, feed_dict=feed)
-
-
-            predicted_indices = preds.argmax(axis=2)
-            results.append(predicted_indices)
-
-        elif config.inference=="decoder_rnn" or config.inference=="actor_decoder_rnn":
+        elif config.inference=="actor_critic_rnn":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -272,43 +256,36 @@ def run_NER():
     """run NER model implementation.
     """
     config = Configuration()
-    np.random.seed(config.random_seed)
     data = load_data(config)
     model = NER(config, data['word_vectors'], data['char_vectors'])
-
     init = tf.global_variables_initializer()
     saver = tf.train.Saver()
 
     with tf.Session() as session:
         best_val_loss = float('inf')
         best_val_epoch = 0
-        tf.set_random_seed(config.random_seed)
+        tf.set_random_seed(1000)
 
         session.run(init)
         first_start = time.time()
-        pretrain = False
-	saver.restore(session, './reinforce_rnn/exp5-2/pretrain_weights/ner.weights')
-        optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-        session.run(tf.variables_initializer(optimizer_scope))
-	for epoch in xrange(config.max_epochs):
+        pretrain = True
+        #saver.restore(session, './reinforce_rnn/exp5-2/pretrain_weights/ner.weights')
+        #optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+        #session.run(tf.variables_initializer(optimizer_scope))
+        for epoch in xrange(config.max_epochs):
             print
             print 'Epoch {}'.format(epoch)
 
             start = time.time()
             ###
-	    '''
-            #manually reseting adam optimizer
-            if(epoch==4 or epoch==8 or epoch==12 or epoch==16 or epoch==20 or epoch==24 or epoch==28):
-                optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                session.run(tf.variables_initializer(optimizer_scope))
-	    '''
-
+            '''
             if epoch==0 or epoch%3!=0:
                 pretrain=False
             else:
                 pretrain=True
+            '''
 
-            train_loss , baseline_train_loss = run_epoch(
+            train_loss , V_train_loss = run_epoch(
                                                     config,
                                                     model,
                                                     pretrain,
@@ -336,7 +313,7 @@ def run_NER():
                                     )
 
             print 'Training loss: {}'.format(train_loss)
-            if not pretrain and config.inference=="actor_decoder_rnn": print 'Baseline Training loss: {}'.format(baseline_train_loss)
+            if not pretrain and config.inference=="actor_critic_rnn": print 'V Training loss: {}'.format(V_train_loss)
             save_predictions(
                             config,
                             predictions,
@@ -348,10 +325,8 @@ def run_NER():
                             data['num_to_word']
                             )
 
-            val_fscore = eval_fscore()
-            val_fscore_loss = 100.0 - val_fscore
+            val_fscore_loss = 100.0 - eval_fscore()
             print 'Validation fscore: {}'.format(val_fscore)
-            print 'Validation fscore loss: {}'.format(val_fscore_loss)
 
             if  val_fscore_loss < best_val_loss:
                 best_val_loss = val_fscore_loss
@@ -388,7 +363,7 @@ def run_NER():
                                 )
 
         print 'Total prediction time: {} seconds'.format(time.time() - start)
-        print 'Writing predictions to cross.dev.predicted'
+        print 'Writing predictions to dev.predicted'
         save_predictions(
                         config,
                         predictions,

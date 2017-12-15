@@ -16,32 +16,16 @@ class NER(object):
 
         H = self.encoder(char_embed, word_embed, cap_embed, config)
 
-        if config.inference=="softmax":
-            self.train_by_softmax(H, config)
-
-        elif config.inference=="crf":
+        if config.inference=="crf":
             self.train_by_crf(H, config)
 
-        elif config.inference=="decoder_rnn":
-            self.train_by_decoder_rnn(H, config)
+        elif config.inference=="actor_critic_rnn":
+            self.train_by_actor_critic_rnn(H, config)
 
-            if config.decoding=="greedy":
-                self.outputs = self.greedy_decoding(H, config)
+            with tf.variable_scope("V_adam_optimizer"):
+                self.V_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.V_loss)
 
-            elif config.decoding=="beamsearch":
-                self.outputs = self.beamsearch_decoding(H, config)
-
-        elif config.inference=="actor_decoder_rnn":
-            self.train_by_actor_decoder_rnn(H, config)
-
-            with tf.variable_scope("baseline_adam_optimizer"):
-                self.baseline_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.baseline_loss)
-
-            if config.decoding=="greedy":
-                self.outputs = self.greedy_decoding(H, config)
-
-            elif config.decoding=="beamsearch":
-                self.outputs = self.beamsearch_decoding(H, config)
+            self.outputs = self.greedy_decoding(H, config)
 
         self.train_op = self.add_training_op(self.loss, config)
         return
@@ -391,8 +375,8 @@ class NER(object):
 
         """hidden layer"""
         with tf.variable_scope("hidden"):
-            U_hidden = tf.get_variable(
-                            "U_hidden",
+            W_hidden = tf.get_variable(
+                            "W_hidden",
                             (2 * config.word_rnn_hidden_units, config.word_rnn_hidden_units),
                             tf.float32,
                             self.xavier_initializer
@@ -412,65 +396,14 @@ class NER(object):
                                 dropped_encoder_final_hs,
                                 (-1, 2  *  config.word_rnn_hidden_units)
                             ),
-                            U_hidden
+                            W_hidden
                         ),
                         b_hidden
                     )
-            H = tf.tanh(H)
+            H = tf.nn.relu(H)
             H = tf.reshape(H, (-1, config.max_sentence_length, config.word_rnn_hidden_units))
 
         return H
-
-    def train_by_softmax(self, H, config):
-
-        """
-        Apply a softmax layer to get a probability for each tag.
-        Define the loss during training and do testing to save predictions.
-        """
-
-        """softmax prediction layer"""
-        with tf.variable_scope("softmax"):
-            U_softmax = tf.get_variable(
-                            "U_softmax",
-                            (config.word_rnn_hidden_units, config.tag_size),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b_softmax = tf.get_variable(
-                            "b_softmax",
-                            (config.tag_size,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-            preds = tf.add(
-                        tf.matmul(
-                            tf.reshape(
-                                H,
-                                (-1, config.word_rnn_hidden_units)
-                            ),
-                            U_softmax
-                        ),
-                        b_softmax
-                    )
-
-            preds = tf.reshape(
-                        preds,
-                        (-1, config.max_sentence_length, config.tag_size)
-                        )
-
-
-        self.loss = tf.contrib.seq2seq.sequence_loss(
-                                    logits=preds,
-                                    targets=self.tag_placeholder,
-                                    weights=self.word_mask_placeholder,
-                                    average_across_timesteps=True,
-                                    average_across_batch=True
-                                    )
-
-        self.predictions = tf.nn.softmax(preds)
-        return self.loss
 
     def train_by_crf(self, H, config):
 
@@ -481,8 +414,8 @@ class NER(object):
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
-            U_softmax = tf.get_variable(
-                            "U_softmax",
+            W_softmax = tf.get_variable(
+                            "W_softmax",
                             (config.word_rnn_hidden_units, config.tag_size),
                             tf.float32,
                             self.xavier_initializer
@@ -502,7 +435,7 @@ class NER(object):
                                 H,
                                 (-1, config.word_rnn_hidden_units)
                             ),
-                            U_softmax
+                            W_softmax
                         ),
                         b_softmax
                     )
@@ -522,121 +455,16 @@ class NER(object):
 
         return self.loss
 
-    def train_by_decoder_rnn(self, H, config):
 
-        """
-        Apply a decoder_rnn layer in the training step to get a score for each tag.
-        Defines the loss during training.
-        """
 
-        #we need to define a tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer"):
-            tag_lookup_table = tf.get_variable(
-                                    name = "tag_lookup_table",
-                                    shape = (config.tag_size, config.tag_embedding_size),
-                                    dtype= tf.float32,
-                                    trainable= True,
-                                    initializer = self.xavier_initializer
-                                    )
-
-        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-        b_size = tf.shape(tag_embeddings)[0]
-
-        #add GO symbol into the begining of every sentence and
-        #shift rest by one position.
-
-        temp = []
-        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
-        for time_index in range(config.max_sentence_length):
-            if time_index==0:
-                temp.append(GO_symbol)
-            else:
-                temp.append(tag_embeddings_t[time_index-1])
-
-        temp = tf.stack(temp, axis=1)
-
-        tag_embeddings_final = temp
-
-        with tf.variable_scope('decoder_rnn') as scope:
-            self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
-                                        num_units=config.decoder_rnn_hidden_units,
-                                        use_peepholes=False,
-                                        cell_clip=None,
-                                        initializer=self.xavier_initializer,
-                                        num_proj=None,
-                                        proj_clip=None,
-                                        num_unit_shards=None,
-                                        num_proj_shards=None,
-                                        forget_bias=1.0,
-                                        state_is_tuple=True,
-                                        activation=tf.tanh
-                                        )
-
-            tag_scores, _ = tf.nn.dynamic_rnn(
-                                    self.decoder_lstm_cell,
-                                    tag_embeddings_final,
-                                    sequence_length=self.sentence_length_placeholder,
-                                    initial_state=None,
-                                    dtype=tf.float32,
-                                    parallel_iterations=None,
-                                    swap_memory=False,
-                                    time_major=False,
-                                    scope=scope
-                                    )
-
-        tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-        H_and_tag_scores = tf.concat([H,tag_scores_dropped], axis=2)
-
-        """softmax prediction layer"""
-        with tf.variable_scope("softmax"):
-            U_softmax = tf.get_variable(
-                            "U_softmax",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b_softmax = tf.get_variable(
-                            "b_softmax",
-                            (config.tag_size,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-            preds = tf.add(
-                        tf.matmul(
-                            tf.reshape(
-                                H_and_tag_scores,
-                                (-1, config.word_rnn_hidden_units + config.decoder_rnn_hidden_units)
-                            ),
-                            U_softmax
-                        ),
-                        b_softmax
-                    )
-
-            Preds = tf.reshape(
-                            preds,
-                            (-1, config.max_sentence_length, config.tag_size)
-                        )
-
-        self.loss = tf.contrib.seq2seq.sequence_loss(
-                                    logits=Preds,
-                                    targets=self.tag_placeholder,
-                                    weights=self.word_mask_placeholder,
-                                    average_across_timesteps=True,
-                                    average_across_batch=True
-                                    )
-
-        return self.loss
-
-    def train_by_actor_decoder_rnn(self, H, config):
+    def train_by_actor_critic_rnn(self, H, config):
         """
         Apply an actor layer in the training step.
         Defines the loss during training.
         """
 
         b_size = tf.shape(H)[0]
+
         #we need to define a tag embedding layer.
         with tf.variable_scope("tag_embedding_layer"):
             tag_lookup_table = tf.get_variable(
@@ -649,8 +477,8 @@ class NER(object):
 
         """softmax prediction layer"""
         with tf.variable_scope("softmax"):
-            U_softmax = tf.get_variable(
-                            "U_softmax",
+            W_softmax = tf.get_variable(
+                            "W_softmax",
                             (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
                             tf.float32,
                             self.xavier_initializer
@@ -663,30 +491,16 @@ class NER(object):
                             tf.constant_initializer(0.0)
                             )
 
-        with tf.variable_scope("baseline"):
-            W1_baseline = tf.get_variable(
-                            "W1_baseline",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 25),
+        with tf.variable_scope("V"):
+            W_V = tf.get_variable(
+                            "W_V",
+                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units,1),
                             tf.float32,
                             self.xavier_initializer
                             )
 
-            b1_baseline = tf.get_variable(
-                            "b1_baseline",
-                            (25,),
-                            tf.float32,
-                            tf.constant_initializer(0.0)
-                            )
-
-            W2_baseline = tf.get_variable(
-                            "W2_baseline",
-                            (25, 1),
-                            tf.float32,
-                            self.xavier_initializer
-                            )
-
-            b2_baseline = tf.get_variable(
-                            "b2_baseline",
+            b_V = tf.get_variable(
+                            "b_V",
                             (1,),
                             tf.float32,
                             tf.constant_initializer(0.0)
@@ -709,8 +523,9 @@ class NER(object):
         #add GO symbol into the begining of every sentence and
         #shift rest by one position.
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
-        temp = []
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+
+        temp = []
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         for time_index in range(config.max_sentence_length):
             if time_index==0:
@@ -722,9 +537,9 @@ class NER(object):
 
         tag_embeddings_final = temp
 
-        def cross_loss():
+        def maximum_likelihood():
             with tf.variable_scope('decoder_rnn') as scope:
-                tag_scores, _ = tf.nn.dynamic_rnn(
+                tag_states, _ = tf.nn.dynamic_rnn(
                                         self.decoder_lstm_cell,
                                         tag_embeddings_final,
                                         sequence_length=self.sentence_length_placeholder,
@@ -736,15 +551,15 @@ class NER(object):
                                         scope=scope
                                         )
 
-            tag_scores_dropped = tf.nn.dropout(tag_scores, self.dropout_placeholder)
-            H_and_tag_scores = tf.concat([H,tag_scores_dropped], axis=2)
+            tag_states_dropped = tf.nn.dropout(tag_states, self.dropout_placeholder)
+            H_and_tag_states = tf.concat([H,tag_states_dropped], axis=2)
             preds = tf.add(
                             tf.matmul(
                                 tf.reshape(
-                                    H_and_tag_scores,
+                                    H_and_tag_states,
                                     (-1, config.word_rnn_hidden_units + config.decoder_rnn_hidden_units)
                                 ),
-                                U_softmax
+                                W_softmax
                             ),
                             b_softmax
                         )
@@ -762,14 +577,13 @@ class NER(object):
                                         average_across_batch=True
                                         )
 
-            #b2_baseline is just a dummy loss added for coding purpose.
-            return cross_loss, b2_baseline
+            #b_V is just a dummy loss added for coding purpose.
+            return cross_loss, b_V
 
-        def actor_loss():
-            GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        def actor_critic_loss():
             H_t = tf.transpose(H, [1,0,2])
             Policies = []
-            Baselines = []
+            V = []
             with tf.variable_scope('decoder_rnn', reuse=True) as scope:
                 initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
             	for time_index in range(config.max_sentence_length):
@@ -782,58 +596,62 @@ class NER(object):
                     output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
                     H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
-                    #forward pass for the baseline estimation
-                    baseline = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_baseline), b1_baseline)
-                    baseline = tf.add(tf.matmul(baseline, W2_baseline), b2_baseline)
-                    Baselines.append(baseline)
-
-                    pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-
+                    #forward pass for the V estimation
+                    v = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W_V), b_V)
+                    V.append(v)
+                    pred = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
                     policy = tf.nn.softmax(pred)
-                    prev_output = tf.matmul(tf.nn.softmax(10000.0 * pred), tag_lookup_table)
+                    Policies.append(policy)
 
-            Policies.append(policy)
+                    #approximating argmax in finding the token with the high probability.
+                    alpha = 10**3
+                    prev_output = tf.matmul(tf.nn.softmax(alpha * pred), tag_lookup_table)
+
 
             Policies = tf.stack(Policies, axis=1)
-            Baselines = tf.stack(Baselines, axis=1)
+            V = tf.stack(V, axis=1)
 
-            Baselines = tf.reshape(
-                      		Baselines,
+            V = tf.reshape(
+                      		V,
                       		(-1, config.max_sentence_length)
-			)
+			              )
 
             is_true_tag = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * is_true_tag - 1.0
-	    true_prob = tf.reduce_sum(tf.one_hot(self.tag_placeholder, config.tag_size, off_value=0.0, on_value=1.0, dtype=tf.float32) * Policies, axis=2)
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
-            Baselines = tf.multiply(Baselines, self.word_mask_placeholder)
+            V = tf.multiply(V, self.word_mask_placeholder)
 
             Rewards_t = tf.transpose(Rewards, [1,0])
-            Baselines_t = tf.transpose(Baselines, [1,0])
+            V_t = tf.transpose(V, [1,0])
             Returns = []
-            gamma = 0.6
-	    beta = 0.01
+
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
-                if t < config.max_sentence_length - 5:
-                    ret =  Rewards_t[t] + gamma * Rewards_t[t+1] + (gamma**2) * Rewards_t[t+2] + (gamma**3) * Rewards_t[t+3] + (gamma**4) * Rewards_t[t+4] + (gamma**5) * Baselines_t[t+5]
-                else:
-                    ret = zeros
+                ret = zeros
+                if t < config.max_sentence_length - config.n_step:
+                    for i in range(config.n_step):
+                        ret += (config.gamma ** i) * Rewards_t[t + i]
+                        if i == config.n_step - 1:
+                            ret += (config.gamma ** config.n_step) * V_t[t + config.n_step]
+
                 Returns.append(ret)
 
             Returns = tf.stack(Returns, axis=1)
 
-            Objective = tf.log(tf.reduce_max(Policies, axis=2)) * tf.stop_gradient(Returns - Baselines) + beta * tf.stop_gradient(1 - is_true_tag) * tf.log(true_prob) 
+            #approximating max function!
+            max_policy = tf.divide(tf.reduce_logsumexp(alpha * Policies, axis=2), alpha)
+
+            Objective = tf.log(max_policy) * tf.stop_gradient(Returns - V)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
-            baseline_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - Baselines, 2) * self.word_mask_placeholder) / 2.0
+            V_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - V, 2) * self.word_mask_placeholder)
 
-            actor_loss = -tf.reduce_mean(Objective_masked)
-            return actor_loss, baseline_loss
+            actor_critic_loss = -tf.reduce_mean(tf.reduce_mean(Objective_masked, axis=1), axis=0)
+            return actor_critic_loss, V_loss
 
-        self.loss, self.baseline_loss = tf.cond(self.pretrain_placeholder, cross_loss, actor_loss)
+        self.loss, self.V_loss = tf.cond(self.pretrain_placeholder, cross_loss, actor_critic_loss)
 
-        return self.loss, self.baseline_loss
+        return self.loss, self.V_loss
 
     def greedy_decoding(self, H, config):
 
@@ -842,7 +660,7 @@ class NER(object):
 
         """Reload softmax prediction layer"""
         with tf.variable_scope("softmax", reuse=True):
-            U_softmax = tf.get_variable("U_softmax")
+            W_softmax = tf.get_variable("W_softmax")
             b_softmax = tf.get_variable("b_softmax")
 
         #reloading the tag embedding layer.
@@ -864,130 +682,12 @@ class NER(object):
 
 
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)
-                pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
+                pred = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
                 predictions = tf.nn.softmax(pred)
                 predicted_indices = tf.argmax(predictions, axis=1)
                 outputs.append(predicted_indices)
 
             self.outputs = tf.stack(outputs, axis=1)
-
-        return self.outputs
-
-    def beamsearch_decoding(self, H, config):
-
-        #batch size
-        b_size = tf.shape(H)[0]
-
-        """Reload softmax prediction layer"""
-        with tf.variable_scope("softmax", reuse=True):
-            U_softmax = tf.get_variable("U_softmax")
-            b_softmax = tf.get_variable("b_softmax")
-
-        #we need to reload the tag embedding layer.
-        with tf.variable_scope("tag_embedding_layer", reuse=True):
-            tag_lookup_table = tf.get_variable("tag_lookup_table")
-
-        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
-        initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
-        H_t = tf.transpose(H, [1,0,2])
-
-        """ we will need index to select top ranked beamsize stuff"""
-        #batch index
-        b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
-
-        #beam index
-        be_index = tf.constant(
-                                config.beamsize * config.beamsize,
-                                dtype=tf.int32,
-                                shape=(1, config.beamsize)
-                                )
-
-
-        with tf.variable_scope("decoder_rnn", reuse=True) as scope:
-            for time_index in range(config.max_sentence_length):
-                if time_index==0:
-                    output, (c_state, m_state) = self.decoder_lstm_cell(GO_symbol, initial_state)
-                    H_and_output = tf.concat([H_t[time_index], output], axis=1)
-                    pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-                    predictions = tf.nn.softmax(pred)
-                    probs, indices = tf.nn.top_k(predictions, k=config.beamsize, sorted=True)
-                    prev_indices = indices
-                    beam = tf.expand_dims(indices, axis=2)
-                    prev_probs = tf.log(probs)
-                    prev_c_states = [c_state for i in range(config.beamsize)]
-                    prev_c_states = tf.stack(prev_c_states, axis=1)
-                    prev_m_states = [m_state for i in range(config.beamsize)]
-                    prev_m_states = tf.stack(prev_m_states, axis=1)
-
-                else:
-                    prev_indices_t = tf.transpose(prev_indices, [1,0])
-                    prev_probs_t = tf.transpose(prev_probs, [1,0])
-                    prev_c_states_t = tf.transpose(prev_c_states, [1,0,2])
-                    prev_m_states_t = tf.transpose(prev_m_states, [1,0,2])
-                    beam_t = tf.transpose(beam, [1,0,2])
-
-                    probs_candidates = []
-                    indices_candidates = []
-                    beam_candidates = []
-                    c_state_candidates = []
-                    m_state_candidates = []
-                    for b in range(config.beamsize):
-                        prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
-                        output, (c_state, m_state) = self.decoder_lstm_cell(
-                                                        prev_output,
-                                                        (prev_c_states_t[b],prev_m_states_t[b])
-                                                        )
-
-                        H_and_output = tf.concat([H_t[time_index], output], axis=1)
-                        pred = tf.add(tf.matmul(H_and_output, U_softmax), b_softmax)
-                        predictions = tf.nn.softmax(pred)
-                        probs, indices = tf.nn.top_k(predictions, k=config.beamsize, sorted=True)
-                        probs_t = tf.transpose(probs, [1,0])
-                        indices_t = tf.transpose(indices, [1,0])
-                        for bb in range(config.beamsize):
-                            probs_candidates.append(tf.add(prev_probs_t[b], tf.log(probs_t[bb])))
-                            indices_candidates.append(indices_t[bb])
-                            beam_candidates.append(tf.concat(
-                                                        [beam_t[b],
-                                                         tf.expand_dims(indices_t[bb], axis=1)
-                                                         ], axis=1
-                                                         )
-                                                    )
-                            c_state_candidates.append(c_state)
-                            m_state_candidates.append(m_state)
-
-                    temp_probs = tf.stack(probs_candidates, axis=1)
-                    temp_indices = tf.stack(indices_candidates, axis=1)
-                    temp_beam = tf.stack(beam_candidates, axis=1)
-                    temp_c_states = tf.stack(c_state_candidates, axis=1)
-                    temp_m_states = tf.stack(m_state_candidates, axis=1)
-                    _, max_indices = tf.nn.top_k(temp_probs, k=config.beamsize, sorted=True)
-
-                    #index
-                    index = tf.add(
-                                tf.matmul(b_index, be_index),
-                                max_indices
-                                )
-                    prev_probs = tf.gather(tf.reshape(temp_probs, [-1]), index)
-                    prev_indices = tf.gather(tf.reshape(temp_indices, [-1]), index)
-                    beam = tf.gather(tf.reshape(temp_beam, [-1, time_index+1]), index)
-                    prev_c_states = tf.gather(
-                                            tf.reshape(
-                                                temp_c_states,
-                                                [-1, config.decoder_rnn_hidden_units]
-                                            ),
-                                            index
-                                        )
-                    prev_m_states = tf.gather(
-                                            tf.reshape(
-                                                temp_m_states,
-                                                [-1, config.decoder_rnn_hidden_units]
-                                            ),
-                                            index
-                                        )
-
-            beam_t = tf.transpose(beam, [1,0,2])
-            self.outputs = beam_t[0]
 
         return self.outputs
 
