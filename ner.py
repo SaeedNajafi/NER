@@ -335,7 +335,7 @@ def run_model():
                     best_val_loss = val_fscore_loss
                     best_val_epoch = epoch
                     if not os.path.exists('./results/' + model_name + '.' + str(run)):
-                        os.makedirs(path)
+                        os.makedirs('./results/' + model_name + '.' + str(run))
                     saver.save(session, './results/' + model_name + '.' + str(run) + '/weights')
 
                 # For early stopping which is kind of regularization for network.
