@@ -493,15 +493,29 @@ class NER(object):
                             )
 
         with tf.variable_scope("V"):
-            W_V = tf.get_variable(
-                            "W_V",
-                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units,1),
+            W1_V = tf.get_variable(
+                                "W1_V",
+                                (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, 64),
+                                tf.float32,
+                                self.xavier_initializer
+                                )
+                
+            b1_V = tf.get_variable(
+                            "b1_V",
+                            (64, 64),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+                            
+            W2_V = tf.get_variable(
+                            "W2_V",
+                            (64, 1),
                             tf.float32,
                             self.xavier_initializer
                             )
-
-            b_V = tf.get_variable(
-                            "b_V",
+                            
+            b2_V = tf.get_variable(
+                            "b2_V",
                             (1,),
                             tf.float32,
                             tf.constant_initializer(0.0)
@@ -598,8 +612,12 @@ class NER(object):
                     H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
                     #forward pass for the V estimation
-                    v = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W_V), b_V)
+                    v = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_V), b1_V)
+                    v = tf.tanh(v)
+                    v = tf.add(tf.matmul(v, W2_V), b2_V)
+                    v = tf.nn.relu(v)
                     V.append(v)
+                    
                     pred = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
                     policy = tf.nn.softmax(pred)
                     Policies.append(policy)
