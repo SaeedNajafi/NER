@@ -97,7 +97,6 @@ def load_data(config):
     ret['num_to_tag'] = num_to_tag
     ret['num_to_word'] = num_to_word
     ret['word_vectors'] = word_vectors
-    ret['char_vectors'] = char_vectors
     ret['train_data'] = train_data
     ret['dev_data'] = dev_data
     ret['test_data'] = test_data
