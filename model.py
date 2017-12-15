@@ -4,22 +4,21 @@ import numpy as np
 class NER(object):
     """ Implements an NER (Named Entity Recognition) model """
 
-    def __init__(self, config, word_vectors, char_vectors):
+    def __init__(self, config, word_vectors):
         """Constructs the network using the helper functions defined below."""
 
         self.placeholders(config)
         char_embed, word_embed, cap_embed = self.embeddings(
                                                     config,
-                                                    word_vectors,
-                                                    char_vectors
+                                                    word_vectors
                                                     )
 
         H = self.encoder(char_embed, word_embed, cap_embed, config)
 
-        if config.inference=="crf":
+        if config.inference=="CRF":
             self.train_by_crf(H, config)
 
-        elif config.inference=="actor_critic_rnn":
+        elif config.inference=="RNN" or config.inference=="AC-RNN":
             self.train_by_actor_critic_rnn(H, config)
 
             with tf.variable_scope("V_adam_optimizer"):
@@ -117,7 +116,7 @@ class NER(object):
 
         return feed_dict
 
-    def embeddings(self, config, word_vectors, char_vectors):
+    def embeddings(self, config, word_vectors):
         """Add embedding layer that maps from vocabulary to vectors.
         """
 
@@ -151,11 +150,13 @@ class NER(object):
                                 )
 
         with tf.variable_scope("char_embeddings"):
-            character_lookup_table = tf.Variable(
-                                        char_vectors,
-                                        name="character_lookup_table",
-                                        dtype=tf.float32
-                                        )
+            character_lookup_table = tf.get_variable(
+                                    name = "character_lookup_table",
+                                    shape = (config.char_size, config.char_embedding_size),
+                                    dtype= tf.float32,
+                                    trainable= True,
+                                    initializer = self.xavier_initializer
+                                    )
 
         char_embeddings = tf.nn.embedding_lookup(
                                 character_lookup_table,

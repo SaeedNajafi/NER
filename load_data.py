@@ -26,16 +26,7 @@ def load_data(config):
 
     num_to_char = dict(enumerate(chars))
     char_to_num = {v:k for k,v in num_to_char.iteritems()}
-
-    boundry = np.sqrt(np.divide(3.0, config.char_embedding_size))
-    char_vectors = np.random.uniform(
-                            low=-boundry,
-                            high=boundry,
-                            size=(
-                                len(char_to_num),
-                                config.char_embedding_size
-                                )
-                            )
+    config.char_size = len(chars)
 
     # For IOBES format
     tagnames = ['O', 'B-LOC', 'I-LOC', 'S-LOC', 'E-LOC',

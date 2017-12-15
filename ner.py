@@ -86,7 +86,7 @@ def run_epoch(
             V_total_loss.append(V_loss)
             ##
             if verbose and step % verbose == 0:
-                sys.stdout.write('\r{} / {} : loss = {}  |  baseline loss = {}'.format(
+                sys.stdout.write('\r{} / {} : loss = {}  |  V loss = {}'.format(
                                                             step,
                                                             total_steps,
                                                             np.mean(total_loss),
@@ -167,7 +167,7 @@ def predict(
                     tag_batch=tag_data
                 )
 
-        if config.inference=="crf":
+        if config.inference=="CRF":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
                 loss, unary_scores, sequence_lengths, transition_params = session.run(
@@ -203,7 +203,7 @@ def predict(
 
             results.append(inner_results)
 
-        elif config.inference=="actor_critic_rnn":
+        elif config.inference=="RNN" or config.inference=="AC-RNN":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -252,8 +252,19 @@ def eval_fscore():
     result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
     return float(result_lines[1].strip().split()[-1])
 
-def model_run(config, data, pretrain, model_name):
+def run_model():
+    config = Configuration()
+    data = load_data(config)
+    path = "./results"
+    if not os.path.exists(path):
+        os.makedirs(path)
     model = NER(config, data['word_vectors'], data['char_vectors'])
+
+    pretrain = True
+    if config.inference=="AC-RNN":
+        pretrain = False
+
+    model_name = config.inference
     for i in range(config.runs):
         run = i + 1
         tf.set_random_seed(run**2)
@@ -275,7 +286,7 @@ def model_run(config, data, pretrain, model_name):
                     pretrain=False
 
                 print
-                print 'Epoch {}'.format(epoch)
+                print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
                 start = time.time()
                 train_loss , V_train_loss = run_epoch(
                                                         config,
@@ -304,9 +315,8 @@ def model_run(config, data, pretrain, model_name):
                                         data['dev_data']['Y']
                                         )
 
-                print '<model: {}>, <run: {}>'.format(model_name, run)
                 print 'Training loss: {}'.format(train_loss)
-                if not pretrain and config.inference=="actor_critic_rnn": print 'V Training loss: {}'.format(V_train_loss)
+                if not pretrain: print 'V Training loss: {}'.format(V_train_loss)
                 save_predictions(
                                 config,
                                 predictions,
@@ -336,8 +346,8 @@ def model_run(config, data, pretrain, model_name):
             print 'Total training time: {} seconds'.format(time.time() - first_start)
 
             saver.restore(session, './results/' + model_name + '.' + str(run) + '.' + 'weights')
-            print '<model: {}>, <run: {}>'.format(model_name, run)
-            print 'Dev'
+            print
+            print 'Model:{} Run:{} Dev'.format(model_name, run)
             start = time.time()
             _ , predictions = predict(
                                     config,
@@ -351,6 +361,7 @@ def model_run(config, data, pretrain, model_name):
                                     data['dev_data']['sentence_length_X'],
                                     data['dev_data']['Y']
                                     )
+
             print 'Total prediction time: {} seconds'.format(time.time() - start)
             print 'Writing predictions to dev.predicted'
             save_predictions(
@@ -364,7 +375,7 @@ def model_run(config, data, pretrain, model_name):
                             data['num_to_word']
                             )
             print
-            print 'Test'
+            print 'Model:{} Run:{} Test'.format(model_name, run)
             start = time.time()
             _ , predictions = predict(
                                     config,
@@ -392,33 +403,6 @@ def model_run(config, data, pretrain, model_name):
                             data['num_to_word']
                             )
     return
-def run_NER():
-    """run NER model implementation.
-    """
-    config = Configuration()
-    data = load_data(config)
-
-    path = "./results"
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    "CRF"
-    pretrain = True
-    model_name = "crf"
-    config.inference = "crf"
-    model_run(config, data, pretrain, model_name)
-
-    "RNN"
-    pretrain = True
-    model_name = "rnn"
-    config.inference = "actor_critic_rnn"
-    model_run(config, data, pretrain, model_name)
-
-    "AC-RNN"
-    pretrain = False
-    model_name = "AC-RNN"
-    config.inference = "actor_critic_rnn"
-    model_run(config, data, pretrain, model_name)
 
 if __name__ == "__main__":
-  run_NER()
+  run_model()
