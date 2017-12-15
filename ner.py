@@ -275,7 +275,7 @@ def run_model():
             best_val_epoch = 0
             session.run(init)
             if model_name=='AC-RNN':
-                saver.restore(session, './results/' + 'RNN' + '.' + str(run) + '.' + 'weights')
+                saver.restore(session, './results/' + 'RNN' + '.' + str(run) + '/weights')
 
             first_start = time.time()
             for epoch in xrange(config.max_epochs):
@@ -334,7 +334,9 @@ def run_model():
                 if  val_fscore_loss < best_val_loss:
                     best_val_loss = val_fscore_loss
                     best_val_epoch = epoch
-                    saver.save(session, './results/' + model_name + '.' + str(run) + '.' + 'weights')
+                    if not os.path.exists('./results/' + model_name + '.' + str(run)):
+                        os.makedirs(path)
+                    saver.save(session, './results/' + model_name + '.' + str(run) + '/weights')
 
                 # For early stopping which is kind of regularization for network.
                 if epoch - best_val_epoch > config.early_stopping:
@@ -345,7 +347,7 @@ def run_model():
 
             print 'Total training time: {} seconds'.format(time.time() - first_start)
 
-            saver.restore(session, './results/' + model_name + '.' + str(run) + '.' + 'weights')
+            saver.restore(session, './results/' + model_name + '.' + str(run) + '/weights')
             print
             print 'Model:{} Run:{} Dev'.format(model_name, run)
             start = time.time()
