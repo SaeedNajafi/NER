@@ -27,6 +27,7 @@ class Configuration(object):
     runs=2
     gamma = 0.7
     n_step = 3
-    
-    # will be updated!
-    inference = None
+
+    inference = "CRF"
+    #inference = "RNN"
+    #inference = "AC-RNN"
