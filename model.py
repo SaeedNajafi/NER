@@ -2,10 +2,11 @@ import tensorflow as tf
 import numpy as np
 
 class NER(object):
+    seed = None
     """ Implements an NER (Named Entity Recognition) model """
-    def __init__(self, config, word_vectors, seed):
+    def __init__(self, config, word_vectors, sd):
         """Constructs the network using the helper functions defined below."""
-        self.seed = seed
+        self.seed = sd
         self.placeholders(config)
         char_embed, word_embed, cap_embed = self.embeddings(config, word_vectors)
 
@@ -181,7 +182,7 @@ class NER(object):
         out = tf.random_uniform(shape,
                                 minval=-epsilon,
                                 maxval=epsilon,
-                                dtype=tf.float32
+                                dtype=tf.float32,
                                 seed=self.seed
                                 )
 

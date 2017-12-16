@@ -270,7 +270,7 @@ def run_model():
         with tf.Graph().as_default():
             run = i + 1
             tf.set_random_seed(run**2)
-            np.random_seed(run**2)
+            np.random.seed(run**2)
             model = NER(config, data['word_vectors'], run**2)
             init = tf.global_variables_initializer()
             saver = tf.train.Saver()

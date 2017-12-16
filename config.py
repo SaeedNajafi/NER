@@ -28,6 +28,6 @@ class Configuration(object):
     gamma = 0.7
     n_step = 5
 
-    #inference = "CRF"
+    inference = "CRF"
     #inference = "RNN"
-    inference = "AC-RNN"
+    #inference = "AC-RNN"
