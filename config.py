@@ -22,12 +22,12 @@ class Configuration(object):
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
-    max_epochs = 3
+    max_epochs = 64
     early_stopping = 2
     runs=30
     gamma = 0.7
     n_step = 5
-    
+
     inference = "CRF"
     #inference = "RNN"
     #inference = "AC-RNN"
