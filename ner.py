@@ -333,7 +333,7 @@ def run_model():
                                     )
 
                     val_fscore_loss = 100.0 - eval_fscore()
-                    print 'Validation fscore loss: {}'.format(100 - val_fscore_loss)
+                    print 'Validation fscore: {}'.format(100 - val_fscore_loss)
 
                     if  val_fscore_loss < best_val_loss:
                         best_val_loss = val_fscore_loss

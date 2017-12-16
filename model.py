@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 
 class NER(object):
-    seed = None
     """ Implements an NER (Named Entity Recognition) model """
     def __init__(self, config, word_vectors, sd):
         """Constructs the network using the helper functions defined below."""
@@ -501,7 +500,7 @@ class NER(object):
 
             b1_V = tf.get_variable(
                             "b1_V",
-                            (64, 64),
+                            (64,),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
@@ -597,7 +596,6 @@ class NER(object):
             return cross_loss, b2_V
 
         def actor_critic():
-            H_t = tf.transpose(H, [1,0,2])
             Policies = []
             V = []
             with tf.variable_scope('decoder_rnn', reuse=True) as scope:
