@@ -3,15 +3,11 @@ import numpy as np
 
 class NER(object):
     """ Implements an NER (Named Entity Recognition) model """
-
-    def __init__(self, config, word_vectors):
+    def __init__(self, config, word_vectors, seed):
         """Constructs the network using the helper functions defined below."""
-
+        self.seed = seed
         self.placeholders(config)
-        char_embed, word_embed, cap_embed = self.embeddings(
-                                                    config,
-                                                    word_vectors
-                                                    )
+        char_embed, word_embed, cap_embed = self.embeddings(config, word_vectors)
 
         H = self.encoder(char_embed, word_embed, cap_embed, config)
 
@@ -186,6 +182,7 @@ class NER(object):
                                 minval=-epsilon,
                                 maxval=epsilon,
                                 dtype=tf.float32
+                                seed=self.seed
                                 )
 
         return out
@@ -313,7 +310,7 @@ class NER(object):
         """ concat prefix/suffix information with word-level embeddings"""
         char_final_embeddings = tf.concat([fwd_char, bck_char], 2)
         t = tf.concat([char_final_embeddings, word_embeddings], 2)
-        final_embeddings = tf.nn.dropout(t, self.dropout_placeholder)
+        final_embeddings = tf.nn.dropout(t, self.dropout_placeholder, seed=self.seed)
 
         #consider capatilization patterns.
         final_embeddings = tf.concat([final_embeddings, cap_embeddings], axis=2)
@@ -369,7 +366,8 @@ class NER(object):
         #apply dropout
         dropped_encoder_final_hs = tf.nn.dropout(
                                         encoder_final_hs,
-                                        self.dropout_placeholder
+                                        self.dropout_placeholder,
+                                        seed= self.seed
                                     )
 
         ##################################     End   ##################################
@@ -499,21 +497,21 @@ class NER(object):
                                 tf.float32,
                                 self.xavier_initializer
                                 )
-                
+
             b1_V = tf.get_variable(
                             "b1_V",
                             (64, 64),
                             tf.float32,
                             tf.constant_initializer(0.0)
                             )
-                            
+
             W2_V = tf.get_variable(
                             "W2_V",
                             (64, 1),
                             tf.float32,
                             self.xavier_initializer
                             )
-                            
+
             b2_V = tf.get_variable(
                             "b2_V",
                             (1,),
@@ -539,24 +537,26 @@ class NER(object):
         #shift rest by one position.
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        GO_context = tf.zeros((b_size, config.word_rnn_hidden_units), dtype=tf.float32)
 
         temp = []
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
+        H_t = tf.transpose(H, [1,0,2])
         for time_index in range(config.max_sentence_length):
             if time_index==0:
-                temp.append(GO_symbol)
+                temp.append(tf.concat([GO_symbol, GO_context], axis=1))
             else:
-                temp.append(tag_embeddings_t[time_index-1])
+                temp.append(tf.concat([tag_embeddings_t[time_index-1], H_t[time_index-1]], axis=1))
 
         temp = tf.stack(temp, axis=1)
 
-        tag_embeddings_final = temp
+        embeddings_final = temp
 
         def maximum_likelihood():
             with tf.variable_scope('decoder_rnn') as scope:
-                tag_states, _ = tf.nn.dynamic_rnn(
+                out_states, _ = tf.nn.dynamic_rnn(
                                         self.decoder_lstm_cell,
-                                        tag_embeddings_final,
+                                        embeddings_final,
                                         sequence_length=self.sentence_length_placeholder,
                                         initial_state=None,
                                         dtype=tf.float32,
@@ -566,12 +566,12 @@ class NER(object):
                                         scope=scope
                                         )
 
-            tag_states_dropped = tf.nn.dropout(tag_states, self.dropout_placeholder)
-            H_and_tag_states = tf.concat([H,tag_states_dropped], axis=2)
+            out_states_dropped = tf.nn.dropout(out_states, self.dropout_placeholder, seed=self.seed)
+            H_and_out_states = tf.concat([H, out_states_dropped], axis=2)
             preds = tf.add(
                             tf.matmul(
                                 tf.reshape(
-                                    H_and_tag_states,
+                                    H_and_out_states,
                                     (-1, config.word_rnn_hidden_units + config.decoder_rnn_hidden_units)
                                 ),
                                 W_softmax
@@ -592,8 +592,8 @@ class NER(object):
                                         average_across_batch=True
                                         )
 
-            #b_V is just a dummy loss added for coding purpose.
-            return cross_loss, b_V
+            #b2_V is just a dummy loss added for coding purpose.
+            return cross_loss, b2_V
 
         def actor_critic():
             H_t = tf.transpose(H, [1,0,2])
@@ -603,21 +603,22 @@ class NER(object):
                 initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
             	for time_index in range(config.max_sentence_length):
                     if time_index==0:
-                        output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
+                        inp = tf.concat([GO_symbol, GO_context], axis=1)
+                        output, state = self.decoder_lstm_cell(inp, initial_state)
                     else:
                         scope.reuse_variables()
-                        output, state = self.decoder_lstm_cell(prev_output, state)
+                        inp = tf.concat([prev_output, H_t[time_index-1]], axis=1)
+                        output, state = self.decoder_lstm_cell(inp, state)
 
-                    output_dropped = tf.nn.dropout(output, self.dropout_placeholder)
+                    output_dropped = tf.nn.dropout(output, self.dropout_placeholder, seed=self.seed)
                     H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
 
                     #forward pass for the V estimation
                     v = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_V), b1_V)
-                    v = tf.tanh(v)
-                    v = tf.add(tf.matmul(v, W2_V), b2_V)
                     v = tf.nn.relu(v)
+                    v = tf.add(tf.matmul(v, W2_V), b2_V)
                     V.append(v)
-                    
+
                     pred = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
                     policy = tf.nn.softmax(pred)
                     Policies.append(policy)
@@ -630,10 +631,7 @@ class NER(object):
             Policies = tf.stack(Policies, axis=1)
             V = tf.stack(V, axis=1)
 
-            V = tf.reshape(
-                      		V,
-                      		(-1, config.max_sentence_length)
-			              )
+            V = tf.reshape(V, (-1, config.max_sentence_length))
 
             is_true_tag = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
             Rewards = 2 * is_true_tag - 1.0
@@ -665,7 +663,7 @@ class NER(object):
 
             V_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - V, 2) * self.word_mask_placeholder)
 
-            actor_critic_loss = -tf.reduce_mean(tf.reduce_mean(Objective_masked, axis=1), axis=0)
+            actor_critic_loss = -tf.reduce_mean(Objective_masked)
             return actor_critic_loss, V_loss
 
         self.loss, self.V_loss = tf.cond(self.pretrain_placeholder, maximum_likelihood, actor_critic)
@@ -687,6 +685,7 @@ class NER(object):
             tag_lookup_table = tf.get_variable("tag_lookup_table")
 
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        GO_context = tf.zeros((b_size, config.word_rnn_hidden_units), dtype=tf.float32)
         initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
         H_t = tf.transpose(H, [1,0,2])
         outputs = []
@@ -694,10 +693,12 @@ class NER(object):
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
             for time_index in range(config.max_sentence_length):
                 if time_index==0:
-                    output, state = self.decoder_lstm_cell(GO_symbol, initial_state)
+                    inp = tf.concat([GO_symbol, GO_context], axis=1)
+                    output, state = self.decoder_lstm_cell(inp, initial_state)
                 else:
                     prev_output = tf.nn.embedding_lookup(tag_lookup_table, predicted_indices)
-                    output, state = self.decoder_lstm_cell(prev_output, state)
+                    inp = tf.concat([prev_output, H_t[time_index-1]], axis=1)
+                    output, state = self.decoder_lstm_cell(inp, state)
 
 
                 H_and_output = tf.concat([H_t[time_index], output], axis=1)

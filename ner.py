@@ -258,50 +258,103 @@ def run_model():
     path = "./results"
     if not os.path.exists(path):
         os.makedirs(path)
-    model = NER(config, data['word_vectors'])
 
     pretrain = True
     if config.inference=="AC-RNN":
         pretrain = False
 
     model_name = config.inference
+    
     for i in range(config.runs):
-        run = i + 1
-        tf.set_random_seed(run**2)
-        init = tf.global_variables_initializer()
-        saver = tf.train.Saver()
-        with tf.Session() as session:
-            best_val_loss = float('inf')
-            best_val_epoch = 0
-            session.run(init)
-            if model_name=='AC-RNN':
-                saver.restore(session, './results/' + 'RNN' + '.' + str(run) + '/weights')
+        tf.reset_default_graph()
+        with tf.Graph().as_default():
+            run = i + 1
+            tf.set_random_seed(run**2)
+            np.random_seed(run**2)
+            model = NER(config, data['word_vectors'], run**2)
+            init = tf.global_variables_initializer()
+            saver = tf.train.Saver()
+            with tf.Session() as session:
+                best_val_loss = float('inf')
+                best_val_epoch = 0
+                session.run(init)
+                if model_name=='AC-RNN':
+                    saver.restore(session, './results/' + 'RNN' + '.' + str(run) + '/weights')
 
-            first_start = time.time()
-            for epoch in xrange(config.max_epochs):
+                first_start = time.time()
+                for epoch in xrange(config.max_epochs):
 
-                if model_name=='AC-RNN' and epoch%3==2:
-                    pretrain=True
-                elif model_name=='AC-RNN'and (epoch%3==1 or epoch%3==0):
-                    pretrain=False
+                    if model_name=='AC-RNN' and epoch%3==2:
+                        pretrain=True
+                    elif model_name=='AC-RNN'and (epoch%3==1 or epoch%3==0):
+                        pretrain=False
 
+                    print
+                    print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
+                    start = time.time()
+                    train_loss , V_train_loss = run_epoch(
+                                                            config,
+                                                            model,
+                                                            pretrain,
+                                                            session,
+                                                            data['train_data']['char_X'],
+                                                            data['train_data']['word_length_X'],
+                                                            data['train_data']['cap_X'],
+                                                            data['train_data']['word_X'],
+                                                            data['train_data']['mask_X'],
+                                                            data['train_data']['sentence_length_X'],
+                                                            data['train_data']['Y']
+                                                            )
+
+                    _ , predictions = predict(
+                                            config,
+                                            model,
+                                            session,
+                                            data['dev_data']['char_X'],
+                                            data['dev_data']['word_length_X'],
+                                            data['dev_data']['cap_X'],
+                                            data['dev_data']['word_X'],
+                                            data['dev_data']['mask_X'],
+                                            data['dev_data']['sentence_length_X'],
+                                            data['dev_data']['Y']
+                                            )
+
+                    print 'Training loss: {}'.format(train_loss)
+                    if not pretrain: print 'V Training loss: {}'.format(V_train_loss)
+                    save_predictions(
+                                    config,
+                                    predictions,
+                                    data['dev_data']['sentence_length_X'],
+                                    "temp.predicted",
+                                    data['dev_data']['word_X'],
+                                    data['dev_data']['Y'],
+                                    data['num_to_tag'],
+                                    data['num_to_word']
+                                    )
+
+                    val_fscore_loss = 100.0 - eval_fscore()
+                    print 'Validation fscore loss: {}'.format(100 - val_fscore_loss)
+
+                    if  val_fscore_loss < best_val_loss:
+                        best_val_loss = val_fscore_loss
+                        best_val_epoch = epoch
+                        if not os.path.exists('./results/' + model_name + '.' + str(run)):
+                            os.makedirs('./results/' + model_name + '.' + str(run))
+                        saver.save(session, './results/' + model_name + '.' + str(run) + '/weights')
+
+                    # For early stopping which is kind of regularization for network.
+                    if epoch - best_val_epoch > config.early_stopping:
+                        break
+                        ###
+
+                    print 'Epoch training time: {} seconds'.format(time.time() - start)
+
+                print 'Total training time: {} seconds'.format(time.time() - first_start)
+
+                saver.restore(session, './results/' + model_name + '.' + str(run) + '/weights')
                 print
-                print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
+                print 'Model:{} Run:{} Dev'.format(model_name, run)
                 start = time.time()
-                train_loss , V_train_loss = run_epoch(
-                                                        config,
-                                                        model,
-                                                        pretrain,
-                                                        session,
-                                                        data['train_data']['char_X'],
-                                                        data['train_data']['word_length_X'],
-                                                        data['train_data']['cap_X'],
-                                                        data['train_data']['word_X'],
-                                                        data['train_data']['mask_X'],
-                                                        data['train_data']['sentence_length_X'],
-                                                        data['train_data']['Y']
-                                                        )
-
                 _ , predictions = predict(
                                         config,
                                         model,
@@ -315,95 +368,46 @@ def run_model():
                                         data['dev_data']['Y']
                                         )
 
-                print 'Training loss: {}'.format(train_loss)
-                if not pretrain: print 'V Training loss: {}'.format(V_train_loss)
+                print 'Total prediction time: {} seconds'.format(time.time() - start)
+                print 'Writing predictions to dev.predicted'
                 save_predictions(
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                "temp.predicted",
+                                './results/' + model_name + '.' + str(run) + '.' + "dev.predicted",
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
                                 data['num_to_word']
                                 )
+                print
+                print 'Model:{} Run:{} Test'.format(model_name, run)
+                start = time.time()
+                _ , predictions = predict(
+                                        config,
+                                        model,
+                                        session,
+                                        data['test_data']['char_X'],
+                                        data['test_data']['word_length_X'],
+                                        data['test_data']['cap_X'],
+                                        data['test_data']['word_X'],
+                                        data['test_data']['mask_X'],
+                                        data['test_data']['sentence_length_X'],
+                                        data['test_data']['Y']
+                                        )
 
-                val_fscore_loss = 100.0 - eval_fscore()
-                print 'Validation fscore loss: {}'.format(val_fscore_loss)
-
-                if  val_fscore_loss < best_val_loss:
-                    best_val_loss = val_fscore_loss
-                    best_val_epoch = epoch
-                    if not os.path.exists('./results/' + model_name + '.' + str(run)):
-                        os.makedirs('./results/' + model_name + '.' + str(run))
-                    saver.save(session, './results/' + model_name + '.' + str(run) + '/weights')
-
-                # For early stopping which is kind of regularization for network.
-                if epoch - best_val_epoch > config.early_stopping:
-                    break
-                    ###
-
-                print 'Epoch training time: {} seconds'.format(time.time() - start)
-
-            print 'Total training time: {} seconds'.format(time.time() - first_start)
-
-            saver.restore(session, './results/' + model_name + '.' + str(run) + '/weights')
-            print
-            print 'Model:{} Run:{} Dev'.format(model_name, run)
-            start = time.time()
-            _ , predictions = predict(
-                                    config,
-                                    model,
-                                    session,
-                                    data['dev_data']['char_X'],
-                                    data['dev_data']['word_length_X'],
-                                    data['dev_data']['cap_X'],
-                                    data['dev_data']['word_X'],
-                                    data['dev_data']['mask_X'],
-                                    data['dev_data']['sentence_length_X'],
-                                    data['dev_data']['Y']
-                                    )
-
-            print 'Total prediction time: {} seconds'.format(time.time() - start)
-            print 'Writing predictions to dev.predicted'
-            save_predictions(
-                            config,
-                            predictions,
-                            data['dev_data']['sentence_length_X'],
-                            './results/' + model_name + '.' + str(run) + '.' + "dev.predicted",
-                            data['dev_data']['word_X'],
-                            data['dev_data']['Y'],
-                            data['num_to_tag'],
-                            data['num_to_word']
-                            )
-            print
-            print 'Model:{} Run:{} Test'.format(model_name, run)
-            start = time.time()
-            _ , predictions = predict(
-                                    config,
-                                    model,
-                                    session,
-                                    data['test_data']['char_X'],
-                                    data['test_data']['word_length_X'],
-                                    data['test_data']['cap_X'],
-                                    data['test_data']['word_X'],
-                                    data['test_data']['mask_X'],
-                                    data['test_data']['sentence_length_X'],
-                                    data['test_data']['Y']
-                                    )
-
-            print 'Total prediction time: {} seconds'.format(time.time() - start)
-            print 'Writing predictions to test.predicted'
-            save_predictions(
-                            config,
-                            predictions,
-                            data['test_data']['sentence_length_X'],
-                            './results/' + model_name + '.' + str(run) + '.' + "test.predicted",
-                            data['test_data']['word_X'],
-                            data['test_data']['Y'],
-                            data['num_to_tag'],
-                            data['num_to_word']
-                            )
+                print 'Total prediction time: {} seconds'.format(time.time() - start)
+                print 'Writing predictions to test.predicted'
+                save_predictions(
+                                config,
+                                predictions,
+                                data['test_data']['sentence_length_X'],
+                                './results/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                                data['test_data']['word_X'],
+                                data['test_data']['Y'],
+                                data['num_to_tag'],
+                                data['num_to_word']
+                                )
     return
 
 if __name__ == "__main__":
