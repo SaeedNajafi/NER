@@ -16,7 +16,7 @@ class Configuration(object):
     max_sentence_length = 128
     max_word_length = 32
     tag_size = 17
-    decoder_rnn_hidden_units = 64
+    decoder_rnn_hidden_units = 128
     tag_embedding_size = 32
     batch_size = 128
     dropout = 0.5
@@ -26,7 +26,7 @@ class Configuration(object):
     early_stopping = 2
     runs=2
     gamma = 0.7
-    n_step = 3
+    n_step = 5
 
     #inference = "CRF"
     #inference = "RNN"
