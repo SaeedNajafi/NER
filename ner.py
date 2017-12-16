@@ -264,7 +264,7 @@ def run_model():
         pretrain = False
 
     model_name = config.inference
-    
+
     for i in range(config.runs):
         tf.reset_default_graph()
         with tf.Graph().as_default():
@@ -279,7 +279,7 @@ def run_model():
                 best_val_epoch = 0
                 session.run(init)
                 if model_name=='AC-RNN':
-                    saver.restore(session, './results/' + 'RNN' + '.' + str(run) + '/weights')
+                    saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
 
                 first_start = time.time()
                 for epoch in xrange(config.max_epochs):
@@ -338,9 +338,9 @@ def run_model():
                     if  val_fscore_loss < best_val_loss:
                         best_val_loss = val_fscore_loss
                         best_val_epoch = epoch
-                        if not os.path.exists('./results/' + model_name + '.' + str(run)):
-                            os.makedirs('./results/' + model_name + '.' + str(run))
-                        saver.save(session, './results/' + model_name + '.' + str(run) + '/weights')
+                        if not os.path.exists(path + '/' + model_name + '.' + str(run)):
+                            os.makedirs(path + '/' + model_name + '.' + str(run))
+                        saver.save(session, path + '/' + model_name + '.' + str(run) + '/weights')
 
                     # For early stopping which is kind of regularization for network.
                     if epoch - best_val_epoch > config.early_stopping:
@@ -351,7 +351,7 @@ def run_model():
 
                 print 'Total training time: {} seconds'.format(time.time() - first_start)
 
-                saver.restore(session, './results/' + model_name + '.' + str(run) + '/weights')
+                saver.restore(session, path + '/' + model_name + '.' + str(run) + '/weights')
                 print
                 print 'Model:{} Run:{} Dev'.format(model_name, run)
                 start = time.time()
@@ -374,7 +374,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                './results/' + model_name + '.' + str(run) + '.' + "dev.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
@@ -402,7 +402,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['test_data']['sentence_length_X'],
-                                './results/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
                                 data['test_data']['word_X'],
                                 data['test_data']['Y'],
                                 data['num_to_tag'],
