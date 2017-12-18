@@ -744,7 +744,7 @@ class NER(object):
 
 
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
-            for time_index in range(config.max_length):
+            for time_index in range(config.max_sentence_length):
                 if time_index==0:
                     inp = tf.concat([GO_symbol, GO_context], axis=1)
                     output, (c_state, m_state) = self.decoder_lstm(inp, initial_state)
