@@ -747,7 +747,7 @@ class NER(object):
             for time_index in range(config.max_sentence_length):
                 if time_index==0:
                     inp = tf.concat([GO_symbol, GO_context], axis=1)
-                    output, (c_state, m_state) = self.decoder_lstm(inp, initial_state)
+                    output, (c_state, m_state) = self.decoder_lstm_cell(inp, initial_state)
 
                     H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
@@ -776,7 +776,7 @@ class NER(object):
                     for b in range(config.beamsize):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
                         inp = tf.concat([prev_output, H_t[time_index-1]], axis=1)
-                        output, (c_state, m_state) = self.decoder_lstm(
+                        output, (c_state, m_state) = self.decoder_lstm_cell(
                                                         inp,
                                                         (prev_c_states_t[b],prev_m_states_t[b])
                                                         )
