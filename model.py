@@ -733,7 +733,7 @@ class NER(object):
 
         """ we will need index to select top ranked beamsize stuff"""
         #batch index
-        b_index = tf.reshape(tf.range(0, config.b_size),(config.b_size, 1))
+        b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
 
         #beam index
         be_index = tf.constant(
