@@ -23,10 +23,10 @@ class Configuration(object):
     learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 64
-    early_stopping = 2
-    runs=30
+    early_stopping = 3
+    runs=1
     gamma = 0.7
-    n_step = 5
+    n_step = 3
     
     inference = "CRF"
     #inference = "RNN"

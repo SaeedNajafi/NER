@@ -614,7 +614,6 @@ class NER(object):
 
                     #forward pass for the V estimation
                     v = tf.add(tf.matmul(tf.stop_gradient(H_and_output), W1_V), b1_V)
-                    v = tf.nn.relu(v)
                     v = tf.add(tf.matmul(v, W2_V), b2_V)
                     V.append(v)
 
@@ -623,7 +622,7 @@ class NER(object):
                     Policies.append(policy)
 
                     #approximating argmax in finding the token with the high probability.
-                    alpha = 10**3
+                    alpha = 10**6
                     prev_output = tf.matmul(tf.nn.softmax(alpha * pred), tag_lookup_table)
 
 
@@ -654,9 +653,7 @@ class NER(object):
 
             Returns = tf.stack(Returns, axis=1)
 
-            #approximating max function!
-            max_policy = tf.divide(tf.reduce_logsumexp(alpha * Policies, axis=2), alpha)
-
+	    max_policy = tf.reduce_max(Policies, axis=2)
             Objective = tf.log(max_policy) * tf.stop_gradient(Returns - V)
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 

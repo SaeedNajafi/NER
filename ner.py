@@ -268,7 +268,8 @@ def run_model():
     for i in range(config.runs):
         tf.reset_default_graph()
         with tf.Graph().as_default():
-            run = i + 1
+            #run = i + 1
+	    run = 11
             tf.set_random_seed(run**3)
             np.random.seed(run**3)
             model = NER(config, data['word_vectors'], run**3)
