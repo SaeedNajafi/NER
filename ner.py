@@ -414,8 +414,8 @@ def test_model():
     config = Configuration()
     data = load_data(config)
     path = "./results"
-    model_name = config.inference
     for i in range(config.runs):
+	model_name = config.inference
         tf.reset_default_graph()
         with tf.Graph().as_default():
             run = i + 1

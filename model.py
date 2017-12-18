@@ -733,7 +733,7 @@ class NER(object):
 
         """ we will need index to select top ranked beamsize stuff"""
         #batch index
-        b_index = tf.reshape(tf.range(0, config.b_size),(config.b_size, 1))
+        b_index = tf.reshape(tf.range(0, b_size),(b_size, 1))
 
         #beam index
         be_index = tf.constant(
@@ -744,10 +744,10 @@ class NER(object):
 
 
         with tf.variable_scope("decoder_rnn", reuse=True) as scope:
-            for time_index in range(config.max_length):
+            for time_index in range(config.max_sentence_length):
                 if time_index==0:
                     inp = tf.concat([GO_symbol, GO_context], axis=1)
-                    output, (c_state, m_state) = self.decoder_lstm(inp, initial_state)
+                    output, (c_state, m_state) = self.decoder_lstm_cell(inp, initial_state)
 
                     H_and_output = tf.concat([H_t[time_index], output], axis=1)
                     pred = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
@@ -776,7 +776,7 @@ class NER(object):
                     for b in range(config.beamsize):
                         prev_output = tf.nn.embedding_lookup(tag_lookup_table, prev_indices_t[b])
                         inp = tf.concat([prev_output, H_t[time_index-1]], axis=1)
-                        output, (c_state, m_state) = self.decoder_lstm(
+                        output, (c_state, m_state) = self.decoder_lstm_cell(
                                                         inp,
                                                         (prev_c_states_t[b],prev_m_states_t[b])
                                                         )

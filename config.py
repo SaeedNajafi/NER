@@ -10,28 +10,28 @@ class Configuration(object):
 
     """Model hyperparams and data information"""
     word_embedding_size = 100
-    word_rnn_hidden_units = 128
-    char_embedding_size = 32
-    char_rnn_hidden_units = 32
+    word_rnn_hidden_units = 200
+    char_embedding_size = 25
+    char_rnn_hidden_units = 25
     max_sentence_length = 128
     max_word_length = 32
     tag_size = 17
-    decoder_rnn_hidden_units = 128
+    decoder_rnn_hidden_units = 64
     tag_embedding_size = 32
-    batch_size = 128
+    batch_size = 8
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
-    max_epochs = 64
+    max_epochs = 32
     early_stopping = 3
     runs=20
     gamma = 0.7
     n_step = 3
 
-    #inference = "CRF"
-    inference = "RNN"
+    inference = "CRF"
+    #inference = "RNN"
     #inference = "AC-RNN"
 
     greedy = False
     beamsearch = True
-    beamsize = 8
+    beamsize = 4
