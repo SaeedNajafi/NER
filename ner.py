@@ -268,8 +268,7 @@ def run_model():
     for i in range(config.runs):
         tf.reset_default_graph()
         with tf.Graph().as_default():
-            #run = i + 1
-	    run = 11
+            run = i + 1
             tf.set_random_seed(run**3)
             np.random.seed(run**3)
             model = NER(config, data['word_vectors'], run**3)
@@ -411,5 +410,87 @@ def run_model():
                                 )
     return
 
+def test_model():
+    config = Configuration()
+    data = load_data(config)
+    path = "./results"
+    model_name = config.inference
+    for i in range(config.runs):
+        tf.reset_default_graph()
+        with tf.Graph().as_default():
+            run = i + 1
+            tf.set_random_seed(run**3)
+            np.random.seed(run**3)
+            model = NER(config, data['word_vectors'], run**3)
+            init = tf.global_variables_initializer()
+            saver = tf.train.Saver()
+            with tf.Session() as session:
+                session.run(init)
+                saver.restore(session, path + '/' + model_name + '.' + str(run) + '/weights')
+                if config.beamsearch:
+                    model_name = 'beam_' + model_name
+
+                print
+                print 'Model:{} Run:{} Dev'.format(model_name, run)
+                start = time.time()
+                _ , predictions = predict(
+                                        config,
+                                        model,
+                                        session,
+                                        data['dev_data']['char_X'],
+                                        data['dev_data']['word_length_X'],
+                                        data['dev_data']['cap_X'],
+                                        data['dev_data']['word_X'],
+                                        data['dev_data']['mask_X'],
+                                        data['dev_data']['sentence_length_X'],
+                                        data['dev_data']['Y']
+                                        )
+
+                print 'Total prediction time: {} seconds'.format(time.time() - start)
+                print 'Writing predictions to dev.predicted'
+                save_predictions(
+                                config,
+                                predictions,
+                                data['dev_data']['sentence_length_X'],
+                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
+                                data['dev_data']['word_X'],
+                                data['dev_data']['Y'],
+                                data['num_to_tag'],
+                                data['num_to_word']
+                                )
+                print
+                print 'Model:{} Run:{} Test'.format(model_name, run)
+                start = time.time()
+                _ , predictions = predict(
+                                        config,
+                                        model,
+                                        session,
+                                        data['test_data']['char_X'],
+                                        data['test_data']['word_length_X'],
+                                        data['test_data']['cap_X'],
+                                        data['test_data']['word_X'],
+                                        data['test_data']['mask_X'],
+                                        data['test_data']['sentence_length_X'],
+                                        data['test_data']['Y']
+                                        )
+
+                print 'Total prediction time: {} seconds'.format(time.time() - start)
+                print 'Writing predictions to test.predicted'
+                save_predictions(
+                                config,
+                                predictions,
+                                data['test_data']['sentence_length_X'],
+                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                                data['test_data']['word_X'],
+                                data['test_data']['Y'],
+                                data['num_to_tag'],
+                                data['num_to_word']
+                                )
+    return
+
 if __name__ == "__main__":
-  run_model()
+    if sys.argv[1]=='train':
+        run_model()
+
+    elif sys.argv[1]=='test':
+        test_model()

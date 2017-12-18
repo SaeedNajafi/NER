@@ -24,10 +24,14 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 64
     early_stopping = 3
-    runs=1
+    runs=20
     gamma = 0.7
     n_step = 3
-    
-    inference = "CRF"
-    #inference = "RNN"
+
+    #inference = "CRF"
+    inference = "RNN"
     #inference = "AC-RNN"
+
+    greedy = False
+    beamsearch = True
+    beamsize = 8
