@@ -403,7 +403,7 @@ class NER(object):
                         ),
                         b_hidden
                     )
-            H = tf.nn.relu(H)
+            H = tf.tanh(H)
             H = tf.reshape(H, (-1, config.max_sentence_length, config.word_rnn_hidden_units))
 
         return H

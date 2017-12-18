@@ -289,6 +289,13 @@ def run_model():
                     elif model_name=='AC-RNN'and (epoch%3==1 or epoch%3==0):
                         pretrain=False
 
+                    #manually reseting adam optimizer
+                    if epoch%3==2:
+                        optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                        session.run(tf.variables_initializer(optimizer_scope))
+                        optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "V_adam_optimizer")
+                        session.run(tf.variables_initializer(optimizer_scope))
+
                     print
                     print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
                     start = time.time()
@@ -305,49 +312,49 @@ def run_model():
                                                             data['train_data']['sentence_length_X'],
                                                             data['train_data']['Y']
                                                             )
+                    if epoch > 8:
+                        _ , predictions = predict(
+                                                config,
+                                                model,
+                                                session,
+                                                data['dev_data']['char_X'],
+                                                data['dev_data']['word_length_X'],
+                                                data['dev_data']['cap_X'],
+                                                data['dev_data']['word_X'],
+                                                data['dev_data']['mask_X'],
+                                                data['dev_data']['sentence_length_X'],
+                                                data['dev_data']['Y']
+                                                )
 
-                    _ , predictions = predict(
-                                            config,
-                                            model,
-                                            session,
-                                            data['dev_data']['char_X'],
-                                            data['dev_data']['word_length_X'],
-                                            data['dev_data']['cap_X'],
-                                            data['dev_data']['word_X'],
-                                            data['dev_data']['mask_X'],
-                                            data['dev_data']['sentence_length_X'],
-                                            data['dev_data']['Y']
-                                            )
+                        print 'Training loss: {}'.format(train_loss)
+                        if not pretrain: print 'V Training loss: {}'.format(V_train_loss)
+                        save_predictions(
+                                        config,
+                                        predictions,
+                                        data['dev_data']['sentence_length_X'],
+                                        "temp.predicted",
+                                        data['dev_data']['word_X'],
+                                        data['dev_data']['Y'],
+                                        data['num_to_tag'],
+                                        data['num_to_word']
+                                        )
 
-                    print 'Training loss: {}'.format(train_loss)
-                    if not pretrain: print 'V Training loss: {}'.format(V_train_loss)
-                    save_predictions(
-                                    config,
-                                    predictions,
-                                    data['dev_data']['sentence_length_X'],
-                                    "temp.predicted",
-                                    data['dev_data']['word_X'],
-                                    data['dev_data']['Y'],
-                                    data['num_to_tag'],
-                                    data['num_to_word']
-                                    )
+                        val_fscore_loss = 100.0 - eval_fscore()
+                        print 'Validation fscore: {}'.format(100 - val_fscore_loss)
 
-                    val_fscore_loss = 100.0 - eval_fscore()
-                    print 'Validation fscore: {}'.format(100 - val_fscore_loss)
+                        if  val_fscore_loss < best_val_loss:
+                            best_val_loss = val_fscore_loss
+                            best_val_epoch = epoch
+                            if not os.path.exists(path + '/' + model_name + '.' + str(run)):
+                                os.makedirs(path + '/' + model_name + '.' + str(run))
+                            saver.save(session, path + '/' + model_name + '.' + str(run) + '/weights')
 
-                    if  val_fscore_loss < best_val_loss:
-                        best_val_loss = val_fscore_loss
-                        best_val_epoch = epoch
-                        if not os.path.exists(path + '/' + model_name + '.' + str(run)):
-                            os.makedirs(path + '/' + model_name + '.' + str(run))
-                        saver.save(session, path + '/' + model_name + '.' + str(run) + '/weights')
+                        # For early stopping which is kind of regularization for network.
+                        if epoch - best_val_epoch > config.early_stopping:
+                            break
+                            ###
 
-                    # For early stopping which is kind of regularization for network.
-                    if epoch - best_val_epoch > config.early_stopping:
-                        break
-                        ###
-
-                    print 'Epoch training time: {} seconds'.format(time.time() - start)
+                        print 'Epoch training time: {} seconds'.format(time.time() - start)
 
                 print 'Total training time: {} seconds'.format(time.time() - first_start)
 
