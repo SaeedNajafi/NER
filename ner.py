@@ -15,7 +15,7 @@ import utils as ut
 def run_epoch(
             config,
             model,
-            pretrain,
+            ep,
             session,
             char_X,
             word_length_X,
@@ -63,6 +63,13 @@ def run_epoch(
                     pretrain = pretrain,
                     tag_batch= tag_data
                 )
+
+        if config.inference=='AC-RNN':
+            pr = np.random.uniform(low=0.0, high=1.0)
+            if pr <= ep:
+                pretrain=True
+            else:
+                pretrain=False
 
         if pretrain:
             loss , _ = session.run([model.loss, model.train_op], feed_dict=feed)
@@ -285,12 +292,12 @@ def run_model():
                 first_start = time.time()
                 for epoch in xrange(config.max_epochs):
                     ep = config.decay ** epoch
-                    if model_name=='AC-RNN':
-                        pr = np.random.uniform(low=0.0, high=1.0)
-                        if pr <= ep:
-                            pretrain=True
-                        else:
-                            pretrain=False
+                    #if model_name=='AC-RNN':
+                    #    pr = np.random.uniform(low=0.0, high=1.0)
+                    #    if pr <= ep:
+                    #        pretrain=True
+                    #    else:
+                    #        pretrain=False
 
                     #manually reseting adam optimizer
                     if epoch%3==2:
@@ -305,7 +312,7 @@ def run_model():
                     train_loss , V_train_loss = run_epoch(
                                                             config,
                                                             model,
-                                                            pretrain,
+                                                            ep,
                                                             session,
                                                             data['train_data']['char_X'],
                                                             data['train_data']['word_length_X'],
