@@ -18,20 +18,21 @@ class Configuration(object):
     tag_size = 17
     decoder_rnn_hidden_units = 64
     tag_embedding_size = 32
-    batch_size = 8
+    batch_size = 128
     dropout = 0.5
     learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 32
     early_stopping = 3
-    runs=20
+    runs=10
     gamma = 0.7
     n_step = 3
 
-    inference = "CRF"
+    #inference = "CRF"
     #inference = "RNN"
-    #inference = "AC-RNN"
-
+    inference = "AC-RNN"
+    
+    decay = 0.97
     greedy = False
     beamsearch = True
     beamsize = 4

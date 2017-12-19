@@ -260,8 +260,8 @@ def run_model():
         os.makedirs(path)
 
     pretrain = True
-    if config.inference=="AC-RNN":
-        pretrain = False
+    #if config.inference=="AC-RNN":
+        #pretrain = False
 
     model_name = config.inference
 
@@ -278,16 +278,19 @@ def run_model():
                 best_val_loss = float('inf')
                 best_val_epoch = 0
                 session.run(init)
-                if model_name=='AC-RNN':
-                    saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
+
+                #if model_name=='AC-RNN':
+                    #saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
 
                 first_start = time.time()
                 for epoch in xrange(config.max_epochs):
-
-                    if model_name=='AC-RNN' and epoch%3==2:
-                        pretrain=True
-                    elif model_name=='AC-RNN'and (epoch%3==1 or epoch%3==0):
-                        pretrain=False
+                    ep = config.decay ** epoch
+                    if model_name=='AC-RNN':
+                        pr = np.random.uniform(low=0.0, high=1.0)
+                        if pr <= ep:
+                            pretrain=True
+                        else:
+                            pretrain=False
 
                     #manually reseting adam optimizer
                     if epoch%3==2:
