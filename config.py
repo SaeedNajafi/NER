@@ -27,7 +27,7 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 64
     early_stopping = 3
-    runs=20
+    runs=10
     gamma = 0.7
     n_step = 3
 
