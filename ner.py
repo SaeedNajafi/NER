@@ -15,7 +15,7 @@ import utils as ut
 def run_epoch(
             config,
             model,
-            ep,
+            alpha,
             session,
             char_X,
             word_length_X,
@@ -60,18 +60,11 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
-                    pretrain = pretrain,
+                    alpha = alpha,
                     tag_batch= tag_data
                 )
 
-        if config.inference=='AC-RNN':
-            pr = np.random.uniform(low=0.0, high=1.0)
-            if pr <= ep:
-                pretrain=True
-            else:
-                pretrain=False
-
-        if pretrain:
+        if alpha==0.0:
             loss , _ = session.run([model.loss, model.train_op], feed_dict=feed)
             total_loss.append(loss)
             ##
@@ -126,6 +119,9 @@ def predict(
 
     # We deactivate dropout by setting it to 1
     dp = 1.0
+    #dummy value
+    alpha = 0.0
+
     losses = []
     results = []
     if np.any(Y):
@@ -170,7 +166,7 @@ def predict(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
-                    pretrain = False,
+                    alpha=alpha,
                     tag_batch=tag_data
                 )
 
@@ -266,9 +262,10 @@ def run_model():
     if not os.path.exists(path):
         os.makedirs(path)
 
-    pretrain = True
-    #if config.inference=="AC-RNN":
-        #pretrain = False
+    #alpha shows how much we care about the reinforcement learning.
+    alpha = 0.0
+    if config.inference=="AC-RNN":
+        alpha = 0.6
 
     model_name = config.inference
 
@@ -276,9 +273,10 @@ def run_model():
         tf.reset_default_graph()
         with tf.Graph().as_default():
             run = i + 1
-            tf.set_random_seed(run**3)
-            np.random.seed(run**3)
-            model = NER(config, data['word_vectors'], run**3)
+            seed = run**3 + run**2 + run
+            tf.set_random_seed(seed)
+            np.random.seed(seed)
+            model = NER(config, data['word_vectors'], seed)
             init = tf.global_variables_initializer()
             saver = tf.train.Saver()
             with tf.Session() as session:
@@ -286,25 +284,33 @@ def run_model():
                 best_val_epoch = 0
                 session.run(init)
 
-                #if model_name=='AC-RNN':
-                    #saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
+                if model_name=='AC-RNN':
+                    saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
 
                 first_start = time.time()
                 for epoch in xrange(config.max_epochs):
-                    ep = config.decay ** epoch
-                    #if model_name=='AC-RNN':
-                    #    pr = np.random.uniform(low=0.0, high=1.0)
-                    #    if pr <= ep:
-                    #        pretrain=True
-                    #    else:
-                    #        pretrain=False
 
-                    #manually reseting adam optimizer
-                    if epoch%3==2:
-                        optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-                        session.run(tf.variables_initializer(optimizer_scope))
-                        optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "V_adam_optimizer")
-                        session.run(tf.variables_initializer(optimizer_scope))
+                    if model_name=='AC-RNN':
+                        alpha = np.minimum(1.0, alpha + epoch * 0.01)
+                        #adaptive batch sizes to speedup the experiments:
+                        if epoch<3:
+                            config.batch_size = 128
+                        elif epoch<6:
+                            config.batch_size = 64
+                        elif epoch<9:
+                            config.batch_size = 32
+                        else:
+                            config.batch_size = 16
+                    else:
+                        #adaptive batch sizes to speedup the experiments:
+                        if epoch<16:
+                            config.batch_size = 128
+                        elif epoch<20:
+                            config.batch_size = 64
+                        elif epoch<24:
+                            config.batch_size = 32
+                        else:
+                            config.batch_size = 16
 
                     print
                     print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
@@ -312,7 +318,7 @@ def run_model():
                     train_loss , V_train_loss = run_epoch(
                                                             config,
                                                             model,
-                                                            ep,
+                                                            alpha,
                                                             session,
                                                             data['train_data']['char_X'],
                                                             data['train_data']['word_length_X'],
@@ -337,7 +343,7 @@ def run_model():
                                                 )
 
                         print 'Training loss: {}'.format(train_loss)
-                        if not pretrain: print 'V Training loss: {}'.format(V_train_loss)
+                        if alpha!=0.0: print 'V Training loss: {}'.format(V_train_loss)
                         save_predictions(
                                         config,
                                         predictions,
@@ -427,87 +433,5 @@ def run_model():
                                 )
     return
 
-def test_model():
-    config = Configuration()
-    data = load_data(config)
-    path = "./results"
-    for i in range(config.runs):
-	model_name = config.inference
-        tf.reset_default_graph()
-        with tf.Graph().as_default():
-            run = i + 1
-            tf.set_random_seed(run**3)
-            np.random.seed(run**3)
-            model = NER(config, data['word_vectors'], run**3)
-            init = tf.global_variables_initializer()
-            saver = tf.train.Saver()
-            with tf.Session() as session:
-                session.run(init)
-                saver.restore(session, path + '/' + model_name + '.' + str(run) + '/weights')
-                if config.beamsearch:
-                    model_name = 'beam_' + model_name
-
-                print
-                print 'Model:{} Run:{} Dev'.format(model_name, run)
-                start = time.time()
-                _ , predictions = predict(
-                                        config,
-                                        model,
-                                        session,
-                                        data['dev_data']['char_X'],
-                                        data['dev_data']['word_length_X'],
-                                        data['dev_data']['cap_X'],
-                                        data['dev_data']['word_X'],
-                                        data['dev_data']['mask_X'],
-                                        data['dev_data']['sentence_length_X'],
-                                        data['dev_data']['Y']
-                                        )
-
-                print 'Total prediction time: {} seconds'.format(time.time() - start)
-                print 'Writing predictions to dev.predicted'
-                save_predictions(
-                                config,
-                                predictions,
-                                data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
-                                data['dev_data']['word_X'],
-                                data['dev_data']['Y'],
-                                data['num_to_tag'],
-                                data['num_to_word']
-                                )
-                print
-                print 'Model:{} Run:{} Test'.format(model_name, run)
-                start = time.time()
-                _ , predictions = predict(
-                                        config,
-                                        model,
-                                        session,
-                                        data['test_data']['char_X'],
-                                        data['test_data']['word_length_X'],
-                                        data['test_data']['cap_X'],
-                                        data['test_data']['word_X'],
-                                        data['test_data']['mask_X'],
-                                        data['test_data']['sentence_length_X'],
-                                        data['test_data']['Y']
-                                        )
-
-                print 'Total prediction time: {} seconds'.format(time.time() - start)
-                print 'Writing predictions to test.predicted'
-                save_predictions(
-                                config,
-                                predictions,
-                                data['test_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
-                                data['test_data']['word_X'],
-                                data['test_data']['Y'],
-                                data['num_to_tag'],
-                                data['num_to_word']
-                                )
-    return
-
 if __name__ == "__main__":
-    if sys.argv[1]=='train':
-        run_model()
-
-    elif sys.argv[1]=='test':
-        test_model()
+    run_model()

@@ -20,10 +20,10 @@ class NER(object):
             with tf.variable_scope("V_adam_optimizer"):
                 self.V_train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(self.V_loss)
 
-            if config.greedy:
+            if not config.beamsearch:
                 self.outputs = self.greedy_decoding(H, config)
 
-            elif config.beamsearch:
+            else:
                 self.outputs = self.beam_decoding(H, config)
 
         self.train_op = self.add_training_op(self.loss, config)
@@ -77,7 +77,7 @@ class NER(object):
         self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
 
-        self.pretrain_placeholder = tf.placeholder(dtype=tf.bool, shape=())
+        self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
     def create_feed_dict(
                         self,
@@ -88,7 +88,7 @@ class NER(object):
                         word_mask_batch,
                         sentence_length_batch,
                         dropout_batch,
-                        pretrain,
+                        alpha,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -108,7 +108,7 @@ class NER(object):
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
             self.dropout_placeholder: dropout_batch,
-            self.pretrain_placeholder: pretrain
+            self.alpha_placeholder: alpha
             }
 
         if tag_batch is not None:
@@ -596,8 +596,7 @@ class NER(object):
                                         average_across_batch=True
                                         )
 
-            #b2_V is just a dummy loss added for coding purpose.
-            return cross_loss, b2_V
+            return cross_loss
 
         def actor_critic():
             Policies = []
@@ -626,7 +625,7 @@ class NER(object):
                     Policies.append(policy)
 
                     #approximating argmax in finding the token with the high probability.
-                    alpha = 10**6
+                    alpha = 10**4
                     prev_output = tf.matmul(tf.nn.softmax(alpha * pred), tag_lookup_table)
 
 
@@ -666,8 +665,12 @@ class NER(object):
             actor_critic_loss = -tf.reduce_mean(Objective_masked)
             return actor_critic_loss, V_loss
 
-        self.loss, self.V_loss = tf.cond(self.pretrain_placeholder, maximum_likelihood, actor_critic)
+        cross_loss = maximum_likelihood()
+        actor_loss, V_loss = actor_critic()
 
+        a = self.alpha_placeholder
+        self.loss = cross_loss * (1-a) + actor_loss * a
+        self.V_loss = V_loss
         return self.loss, self.V_loss
 
     def greedy_decoding(self, H, config):
