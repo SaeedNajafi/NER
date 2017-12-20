@@ -328,7 +328,7 @@ def run_model():
                                                             data['train_data']['sentence_length_X'],
                                                             data['train_data']['Y']
                                                             )
-                    if epoch > 8:
+                    if epoch > -1:
                         _ , predictions = predict(
                                                 config,
                                                 model,

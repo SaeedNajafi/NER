@@ -625,8 +625,8 @@ class NER(object):
                     Policies.append(policy)
 
                     #approximating argmax in finding the token with the high probability.
-                    alpha = 10**4
-                    prev_output = tf.matmul(tf.nn.softmax(alpha * pred), tag_lookup_table)
+                    beta = 10**5
+                    prev_output = tf.matmul(tf.nn.softmax(beta * pred), tag_lookup_table)
 
 
             Policies = tf.stack(Policies, axis=1)
