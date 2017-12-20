@@ -98,7 +98,7 @@ def run_epoch(
                 sys.stdout.write('\r')
                 sys.stdout.flush()
 
-    if pretrain:
+    if alpha==0.0:
         return np.mean(total_loss), 0
     else:
         return np.mean(total_loss), np.mean(V_total_loss)
@@ -293,21 +293,21 @@ def run_model():
                     if model_name=='AC-RNN':
                         alpha = np.minimum(1.0, alpha + epoch * 0.01)
                         #adaptive batch sizes to speedup the experiments:
-                        if epoch<3:
+                        if epoch<2:
                             config.batch_size = 128
-                        elif epoch<6:
+                        elif epoch<4:
                             config.batch_size = 64
-                        elif epoch<9:
+                        elif epoch<6:
                             config.batch_size = 32
                         else:
                             config.batch_size = 16
                     else:
                         #adaptive batch sizes to speedup the experiments:
-                        if epoch<16:
+                        if epoch<12:
                             config.batch_size = 128
-                        elif epoch<20:
+                        elif epoch<16:
                             config.batch_size = 64
-                        elif epoch<24:
+                        elif epoch<20:
                             config.batch_size = 32
                         else:
                             config.batch_size = 16
@@ -328,7 +328,7 @@ def run_model():
                                                             data['train_data']['sentence_length_X'],
                                                             data['train_data']['Y']
                                                             )
-                    if epoch > -1:
+                    if epoch > 12:
                         _ , predictions = predict(
                                                 config,
                                                 model,

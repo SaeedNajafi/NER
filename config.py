@@ -35,5 +35,5 @@ class Configuration(object):
     #inference = "RNN"
     #inference = "AC-RNN"
 
-    beamsearch = True
+    beamsearch = False
     beamsize = 4
