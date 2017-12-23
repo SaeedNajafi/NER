@@ -10,16 +10,16 @@ class Configuration(object):
 
     """Model hyperparams and data information"""
     word_embedding_size = 100
-    word_rnn_hidden_units = 100
-    char_embedding_size = 25
-    char_rnn_hidden_units = 25
+    word_rnn_hidden_units = 128
+    char_embedding_size = 32
+    char_rnn_hidden_units = 32
     max_sentence_length = 128
     max_word_length = 32
     tag_size = 17
-    decoder_rnn_hidden_units = 100
-    tag_embedding_size = 25
+    decoder_rnn_hidden_units = 128
+    tag_embedding_size = 32
 
-    # we will use differen batches during training!
+    #to speedup experiments
     batch_size = 128
 
     dropout = 0.5
@@ -27,12 +27,12 @@ class Configuration(object):
     max_gradient_norm = 5.
     max_epochs = 64
     early_stopping = 3
-    runs=10
+    runs=20
     gamma = 0.7
     n_step = 3
 
-    inference = "CRF"
-    #inference = "RNN"
+    #inference = "CRF"
+    inference = "RNN"
     #inference = "AC-RNN"
 
     beamsearch = False

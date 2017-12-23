@@ -273,7 +273,7 @@ def run_model():
         tf.reset_default_graph()
         with tf.Graph().as_default():
             run = i + 1
-            seed = run**3 + run**2 + run
+            seed = run**3
             tf.set_random_seed(seed)
             np.random.seed(seed)
             model = NER(config, data['word_vectors'], seed)
@@ -292,25 +292,6 @@ def run_model():
 
                     if model_name=='AC-RNN':
                         alpha = np.minimum(1.0, alpha + epoch * 0.01)
-                        #adaptive batch sizes to speedup the experiments:
-                        if epoch<2:
-                            config.batch_size = 128
-                        elif epoch<4:
-                            config.batch_size = 64
-                        elif epoch<6:
-                            config.batch_size = 32
-                        else:
-                            config.batch_size = 16
-                    else:
-                        #adaptive batch sizes to speedup the experiments:
-                        if epoch<12:
-                            config.batch_size = 128
-                        elif epoch<16:
-                            config.batch_size = 64
-                        elif epoch<20:
-                            config.batch_size = 32
-                        else:
-                            config.batch_size = 16
 
                     print
                     print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
@@ -328,7 +309,7 @@ def run_model():
                                                             data['train_data']['sentence_length_X'],
                                                             data['train_data']['Y']
                                                             )
-                    if epoch > 12:
+                    if epoch > -1:
                         _ , predictions = predict(
                                                 config,
                                                 model,

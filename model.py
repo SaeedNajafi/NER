@@ -596,7 +596,8 @@ class NER(object):
                                         average_across_batch=True
                                         )
 
-            return cross_loss
+            #b2_V is a dummy loss added for coding purposes.
+            return cross_loss, b2_V
 
         def actor_critic():
             Policies = []
@@ -625,7 +626,7 @@ class NER(object):
                     Policies.append(policy)
 
                     #approximating argmax in finding the token with the high probability.
-                    beta = 10**5
+                    beta = 10**6
                     prev_output = tf.matmul(tf.nn.softmax(beta * pred), tag_lookup_table)
 
 
@@ -665,12 +666,18 @@ class NER(object):
             actor_critic_loss = -tf.reduce_mean(Objective_masked)
             return actor_critic_loss, V_loss
 
-        cross_loss = maximum_likelihood()
-        actor_loss, V_loss = actor_critic()
-
         a = self.alpha_placeholder
-        self.loss = cross_loss * (1-a) + actor_loss * a
-        self.V_loss = V_loss
+        def AC_RNN():
+            cross_loss, dummy_loss = maximum_likelihood()
+            actor_loss, V_loss = actor_critic()
+            loss = cross_loss * (1-a) + actor_loss * a
+            return loss, V_loss
+
+        def RNN():
+            cross_loss, dummy_loss = maximum_likelihood()
+            return cross_loss, dummy_loss
+
+        self.loss, self.V_loss = tf.cond(tf.equal(a, tf.constant(0.0, dtype=tf.float32, shape=())), RNN, AC_RNN)
         return self.loss, self.V_loss
 
     def greedy_decoding(self, H, config):
