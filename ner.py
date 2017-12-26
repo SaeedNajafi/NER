@@ -261,14 +261,11 @@ def run_model():
     path = "./results"
     if not os.path.exists(path):
         os.makedirs(path)
-
+    
     #alpha shows how much we care about the reinforcement learning.
     alpha = 0.0
-    if config.inference=="AC-RNN":
-        alpha = 0.6
-
+    save_epoch = 20
     model_name = config.inference
-
     for i in range(config.runs):
         tf.reset_default_graph()
         with tf.Graph().as_default():
@@ -285,15 +282,18 @@ def run_model():
                 session.run(init)
 
                 if model_name=='AC-RNN':
-                    saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
+			save_epoch = -1
+			saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
+			optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+            		session.run(tf.variables_initializer(optimizer_scope))
 
                 first_start = time.time()
-                for epoch in xrange(config.max_epochs):
+		epoch = 1000
+		while (epoch<config.max_epochs):
+		    if model_name=='AC-RNN':
+			alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
 
-                    if model_name=='AC-RNN':
-                        alpha = np.minimum(1.0, alpha + epoch * 0.01)
-
-                    print
+		    print
                     print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
                     start = time.time()
                     train_loss , V_train_loss = run_epoch(
@@ -309,7 +309,7 @@ def run_model():
                                                             data['train_data']['sentence_length_X'],
                                                             data['train_data']['Y']
                                                             )
-                    if epoch > -1:
+                    if epoch > save_epoch:
                         _ , predictions = predict(
                                                 config,
                                                 model,
@@ -352,7 +352,7 @@ def run_model():
                             ###
 
                         print 'Epoch training time: {} seconds'.format(time.time() - start)
-
+		    epoch += 1
                 print 'Total training time: {} seconds'.format(time.time() - first_start)
 
                 saver.restore(session, path + '/' + model_name + '.' + str(run) + '/weights')
@@ -378,7 +378,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "beam.dev.predicted",
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
@@ -406,7 +406,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['test_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "beam.test.predicted",
                                 data['test_data']['word_X'],
                                 data['test_data']['Y'],
                                 data['num_to_tag'],

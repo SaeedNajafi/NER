@@ -629,14 +629,13 @@ class NER(object):
                     beta = 10**6
                     prev_output = tf.matmul(tf.nn.softmax(beta * pred), tag_lookup_table)
 
-
             Policies = tf.stack(Policies, axis=1)
             V = tf.stack(V, axis=1)
 
             V = tf.reshape(V, (-1, config.max_sentence_length))
 
             is_true_tag = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
-            Rewards = 2 * is_true_tag - 1.0
+            Rewards = 2 * is_true_tag - 1
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
             V = tf.multiply(V, self.word_mask_placeholder)
 
@@ -662,6 +661,11 @@ class NER(object):
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             V_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - V, 2) * self.word_mask_placeholder)
+	    # L2 regulirization for linear regressor: V
+	    b = 0.001
+	    reg1 = tf.nn.l2_loss(W1_V)
+	    reg2 = tf.nn.l2_loss(W2_V)
+	    V_loss = b * tf.reduce_mean(reg1) + b * tf.reduce_mean(reg2) + V_loss
 
             actor_critic_loss = -tf.reduce_mean(Objective_masked)
             return actor_critic_loss, V_loss
