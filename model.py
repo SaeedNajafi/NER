@@ -661,11 +661,11 @@ class NER(object):
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             V_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - V, 2) * self.word_mask_placeholder)
-	    # L2 regulirization for linear regressor: V
-	    b = 0.001
-	    reg1 = tf.nn.l2_loss(W1_V)
-	    reg2 = tf.nn.l2_loss(W2_V)
-	    V_loss = b * tf.reduce_mean(reg1) + b * tf.reduce_mean(reg2) + V_loss
+            # L2 regulirization for linear regressor: V
+            b = 0.001
+            reg1 = tf.nn.l2_loss(W1_V)
+            reg2 = tf.nn.l2_loss(W2_V)
+            V_loss = b * tf.reduce_mean(reg1) + b * tf.reduce_mean(reg2) + V_loss
 
             actor_critic_loss = -tf.reduce_mean(Objective_masked)
             return actor_critic_loss, V_loss

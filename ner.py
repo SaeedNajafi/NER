@@ -261,7 +261,7 @@ def run_model():
     path = "./results"
     if not os.path.exists(path):
         os.makedirs(path)
-    
+
     #alpha shows how much we care about the reinforcement learning.
     alpha = 0.0
     save_epoch = 20
@@ -282,18 +282,18 @@ def run_model():
                 session.run(init)
 
                 if model_name=='AC-RNN':
-			save_epoch = -1
-			saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
-			optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
-            		session.run(tf.variables_initializer(optimizer_scope))
+                    save_epoch = -1
+                    saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
+                    optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
+                    session.run(tf.variables_initializer(optimizer_scope))
 
                 first_start = time.time()
-		epoch = 1000
-		while (epoch<config.max_epochs):
-		    if model_name=='AC-RNN':
-			alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
+                epoch = 0
+                while (epoch<config.max_epochs):
+                    if model_name=='AC-RNN':
+                        alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
 
-		    print
+                    print
                     print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
                     start = time.time()
                     train_loss , V_train_loss = run_epoch(
@@ -352,7 +352,7 @@ def run_model():
                             ###
 
                         print 'Epoch training time: {} seconds'.format(time.time() - start)
-		    epoch += 1
+                    epoch += 1
                 print 'Total training time: {} seconds'.format(time.time() - first_start)
 
                 saver.restore(session, path + '/' + model_name + '.' + str(run) + '/weights')
@@ -378,7 +378,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "beam.dev.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
@@ -406,7 +406,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['test_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "beam.test.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
                                 data['test_data']['word_X'],
                                 data['test_data']['Y'],
                                 data['num_to_tag'],
