@@ -26,6 +26,9 @@ class NER(object):
             else:
                 self.outputs = self.beam_decoding(H, config)
 
+        if config.inference=="INDP":
+            self.loss, self.outputs = self.train_by_softmax(H, config)
+        
         self.train_op = self.add_training_op(self.loss, config)
         return
 
@@ -407,6 +410,58 @@ class NER(object):
             H = tf.reshape(H, (-1, config.max_sentence_length, config.word_rnn_hidden_units))
 
         return H
+
+    def train_by_softmax(self, H, config):
+
+        """
+        Apply a softmax layer to get a probability for each tag.
+        Define the loss during training and do testing to save outputs.
+        """
+
+        """softmax prediction layer"""
+        with tf.variable_scope("softmax"):
+            W_softmax = tf.get_variable(
+                            "W_softmax",
+                            (config.word_rnn_hidden_units, config.tag_size),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            b_softmax = tf.get_variable(
+                            "b_softmax",
+                            (config.tag_size,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
+            preds = tf.add(
+                        tf.matmul(
+                            tf.reshape(
+                                H,
+                                (-1, config.word_rnn_hidden_units)
+                            ),
+                            W_softmax
+                        ),
+                        b_softmax
+                    )
+
+            preds = tf.reshape(
+                        preds,
+                        (-1, config.max_sentence_length, config.tag_size)
+                        )
+
+
+        loss = tf.contrib.seq2seq.sequence_loss(
+                                    logits=preds,
+                                    targets=self.tag_placeholder,
+                                    weights=self.word_mask_placeholder,
+                                    average_across_timesteps=True,
+                                    average_across_batch=True
+                                    )
+
+        predictions = tf.nn.softmax(preds)
+        outputs = tf.argmax(predictions, axis=2)
+        return loss, outputs
 
     def train_by_crf(self, H, config):
 

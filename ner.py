@@ -206,7 +206,7 @@ def predict(
 
             results.append(inner_results)
 
-        elif config.inference=="RNN" or config.inference=="AC-RNN":
+        elif config.inference=="INDP" or config.inference=="RNN" or config.inference=="AC-RNN":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 

@@ -33,7 +33,8 @@ class Configuration(object):
 
     #inference = "CRF"
     #inference = "RNN"
-    inference = "AC-RNN"
+    #inference = "AC-RNN"
+    inference = "INDP"
 
     beamsearch = False
     beamsize = 4
