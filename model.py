@@ -26,9 +26,18 @@ class NER(object):
             else:
                 self.outputs = self.beam_decoding(H, config)
 
-        if config.inference=="INDP":
+        elif config.inference=="INDP":
             self.loss, self.outputs = self.train_by_softmax(H, config)
-        
+
+        elif config.inference=="DIF-SCH":
+            self.train_by_scheduled_decoder_rnn(H, config)
+
+            if not config.beamsearch:
+                self.outputs = self.greedy_decoding(H, config)
+
+            else:
+                self.outputs = self.beam_decoding(H, config)
+
         self.train_op = self.add_training_op(self.loss, config)
         return
 
@@ -82,6 +91,10 @@ class NER(object):
 
         self.alpha_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
+        self.schedule_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
+        self.coin_probs_placeholder = tf.placeholder(dtype=tf.float32, shape=(None, config.max_sentence_length))
+
     def create_feed_dict(
                         self,
                         char_input_batch,
@@ -92,6 +105,8 @@ class NER(object):
                         sentence_length_batch,
                         dropout_batch,
                         alpha,
+                        schedule,
+                        coin_probs,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -111,7 +126,9 @@ class NER(object):
             self.word_mask_placeholder: word_mask_batch,
             self.sentence_length_placeholder: sentence_length_batch,
             self.dropout_placeholder: dropout_batch,
-            self.alpha_placeholder: alpha
+            self.alpha_placeholder: alpha,
+            self.schedule_placeholder: schedule,
+            self.coin_probs_placeholder: coin_probs
             }
 
         if tag_batch is not None:
@@ -514,6 +531,100 @@ class NER(object):
         return self.loss
 
 
+    def train_by_scheduled_decoder_rnn(H, config):
+        b_size = tf.shape(H)[0]
+
+        #we need to define a tag embedding layer.
+        with tf.variable_scope("tag_embedding_layer"):
+            tag_lookup_table = tf.get_variable(
+                                    name = "tag_lookup_table",
+                                    shape = (config.tag_size, config.tag_embedding_size),
+                                    dtype= tf.float32,
+                                    trainable= True,
+                                    initializer = self.xavier_initializer
+                                    )
+
+        """softmax prediction layer"""
+        with tf.variable_scope("softmax"):
+            W_softmax = tf.get_variable(
+                            "W_softmax",
+                            (config.word_rnn_hidden_units + config.decoder_rnn_hidden_units, config.tag_size),
+                            tf.float32,
+                            self.xavier_initializer
+                            )
+
+            b_softmax = tf.get_variable(
+                            "b_softmax",
+                            (config.tag_size,),
+                            tf.float32,
+                            tf.constant_initializer(0.0)
+                            )
+
+        self.decoder_lstm_cell = tf.contrib.rnn.LSTMCell(
+                                            num_units=config.decoder_rnn_hidden_units,
+                                            use_peepholes=False,
+                                            cell_clip=None,
+                                            initializer=self.xavier_initializer,
+                                            num_proj=None,
+                                            proj_clip=None,
+                                            num_unit_shards=None,
+                                            num_proj_shards=None,
+                                            forget_bias=1.0,
+                                            state_is_tuple=True,
+                                            activation=tf.tanh
+                                            )
+
+        #add GO symbol into the begining of every sentence and
+        #shift rest by one position.
+        tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
+        GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
+        GO_context = tf.zeros((b_size, config.word_rnn_hidden_units), dtype=tf.float32)
+
+        tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
+        H_t = tf.transpose(H, [1,0,2])
+        Logits = []
+        with tf.variable_scope('decoder_rnn', reuse=True) as scope:
+            initial_state = self.decoder_lstm_cell.zero_state(b_size, tf.float32)
+            for time_index in range(config.max_sentence_length):
+                if time_index==0:
+                    inp = tf.concat([GO_symbol, GO_context], axis=1)
+                    output, state = self.decoder_lstm_cell(inp, initial_state)
+                else:
+                    scope.reuse_variables()
+                    output, state = self.decoder_lstm_cell(inp, state)
+
+                output_dropped = tf.nn.dropout(output, self.dropout_placeholder, seed=self.seed)
+                H_and_output = tf.concat([H_t[time_index], output_dropped], axis=1)
+                logits = tf.add(tf.matmul(H_and_output, W_softmax), b_softmax)
+                Logits.append(logits)
+                def gold_token():
+                    #gold previous token
+                    prev_output = tag_embeddings_t[time_index-1]
+                    return tf.concat([prev_output, H_t[time_index-1]], axis=1)
+                def generated_token():
+                    #generated previous token
+                    #approximating argmax in finding the token with the highest probability.
+                    # in our case self.schedule_placeholder will be changed between
+                    # 1.0 to 0.8. So we map it to 1.0 to 6.0.
+                    # so we increase beta from 10^1 to 10^6.
+                    beta = -25*(self.schedule_placeholder-0.8) + 6.0
+                    beta = 10**beta
+                    prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
+                    return tf.concat([prev_output, H_t[time_index-1]], axis=1)
+
+                cond = tf.greater(self.coin_probs_placeholder, self.schedule_placeholder)
+                inp = tf.cond(cond, generated_token, gold_token)
+
+        Logits = tf.stack(Logits, axis=1)
+        cross_loss = tf.contrib.seq2seq.sequence_loss(
+                                        logits=Logits,
+                                        targets=self.tag_placeholder,
+                                        weights=self.word_mask_placeholder,
+                                        average_across_timesteps=True,
+                                        average_across_batch=True
+                                        )
+        self.loss = cross_loss
+        return self.loss
 
     def train_by_actor_critic_rnn(self, H, config):
         """

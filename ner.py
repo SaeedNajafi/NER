@@ -16,6 +16,7 @@ def run_epoch(
             config,
             model,
             alpha,
+            schedule,
             session,
             char_X,
             word_length_X,
@@ -52,6 +53,10 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
+        b_size = sentence_length_X.shape()[0]
+        #flip coin:
+        coin_probs = np.random.rand(b_size, config.max_sentence_length)
+
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -60,8 +65,10 @@ def run_epoch(
                     word_mask_batch=word_mask_data,
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=config.dropout,
-                    alpha = alpha,
-                    tag_batch= tag_data
+                    alpha=alpha,
+                    schedule=schedule,
+                    coin_probs=coin_probs,
+                    tag_batch=tag_data
                 )
 
         if alpha==0.0:
@@ -121,6 +128,9 @@ def predict(
     dp = 1.0
     #dummy value
     alpha = 0.0
+    schedule = 1.0
+    b_size = sentence_length_X.shape()[0]
+    coin_probs = np.zeros((b_size, config.max_sentence_length))
 
     losses = []
     results = []
@@ -167,6 +177,8 @@ def predict(
                     sentence_length_batch=sentence_length_data,
                     dropout_batch=dp,
                     alpha=alpha,
+                    schedule=schedule,
+                    coin_probs=coin_probs,
                     tag_batch=tag_data
                 )
 
@@ -206,7 +218,7 @@ def predict(
 
             results.append(inner_results)
 
-        elif config.inference=="INDP" or config.inference=="RNN" or config.inference=="AC-RNN":
+        elif config.inference=="DIF-SCH" or config.inference=="INDP" or config.inference=="RNN" or config.inference=="AC-RNN":
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -264,6 +276,7 @@ def run_model():
 
     #alpha shows how much we care about the reinforcement learning.
     alpha = 0.0
+    schedule = 1.0
     save_epoch = 20
     model_name = config.inference
     for i in range(config.runs):
@@ -293,6 +306,12 @@ def run_model():
                     if model_name=='AC-RNN':
                         alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
 
+                    if model_name=='DIF-SCH':
+                        k = 25.0
+                        save_epoch = 5
+                        #inverse sigmoid decay
+                        schedule = float(k)/float(k + np.exp(float(epoch)/k))
+
                     print
                     print 'Model:{} Run:{} Epoch:{}'.format(model_name, run, epoch)
                     start = time.time()
@@ -300,6 +319,7 @@ def run_model():
                                                             config,
                                                             model,
                                                             alpha,
+                                                            schedule,
                                                             session,
                                                             data['train_data']['char_X'],
                                                             data['train_data']['word_length_X'],
