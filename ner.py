@@ -53,7 +53,7 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
-        b_size = sentence_length_X.shape()[0]
+        b_size = sentence_length_X.shape[0]
         #flip coin:
         coin_probs = np.random.rand(b_size, config.max_sentence_length)
 
@@ -129,7 +129,7 @@ def predict(
     #dummy value
     alpha = 0.0
     schedule = 1.0
-    b_size = sentence_length_X.shape()[0]
+    b_size = sentence_length_X.shape[0]
     coin_probs = np.zeros((b_size, config.max_sentence_length))
 
     losses = []
