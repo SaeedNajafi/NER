@@ -306,9 +306,8 @@ def run_model():
                     if model_name=='AC-RNN':
                         alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
 
-                    if model_name=='DIF-SCH':
+                    if epoch>20 and model_name=='DIF-SCH':
                         k = 25.0
-                        save_epoch = 5
                         #inverse sigmoid decay
                         schedule = float(k)/float(k + np.exp(float(epoch)/k))
 

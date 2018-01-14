@@ -574,16 +574,11 @@ class NER(object):
                                             activation=tf.tanh
                                             )
 
-        #add GO symbol into the begining of every sentence and
-        #shift rest by one position.
         tag_embeddings = tf.nn.embedding_lookup(tag_lookup_table, self.tag_placeholder)
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         GO_context = tf.zeros((b_size, config.word_rnn_hidden_units), dtype=tf.float32)
 
-        schedule = (self.coin_probs_placeholder - self.coin_probs_placeholder) + self.schedule_placeholder
-        cond = tf.greater(self.coin_probs_placeholder, schedule)
-        switch = tf.cast(cond, dtype=tf.float32)
-        #0 for gold previous token, 1 for generated previous token
+        switch = tf.greater(self.coin_probs_placeholder, schedule)
         switch_t = tf.transpose(switch, [1,0])
 
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
@@ -597,18 +592,21 @@ class NER(object):
                     output, state = self.decoder_lstm_cell(inp, initial_state)
                 else:
                     scope.reuse_variables()
-                    gold_token = tf.concat([tag_embeddings_t[time_index-1], H_t[time_index-1]], axis=1)
-                    #generated previous token
-                    #approximating argmax in finding the token with the highest probability.
-                    # in our case self.schedule_placeholder will be changed between
-                    # 1.0 to 0.8. So we map it to 1.0 to 6.0.
-                    # so we increase beta from 10^1 to 10^6.
-                    beta = -25*(self.schedule_placeholder-0.8) + 6.0
-                    beta = 10**beta
-                    prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
-                    generated_token = tf.concat([prev_output, H_t[time_index-1]], axis=1)
+                    def gold_token:
+                        return tf.concat([tag_embeddings_t[time_index-1], H_t[time_index-1]], axis=1)
+                    def generated_token:
+                        beta = 10**4
+                        prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
+                        return tf.concat([prev_output, H_t[time_index-1]], axis=1)
+
                     sw = switch_t[time_index-1]
-                    inp = tf.multiply(generated_token, sw) + tf.multiply(gold_token, 1.0-sw)
+                    inp = tf.cond(sw, generated_token, gold_token)
+                    #beta = -25*(self.schedule_placeholder-0.8) + 6.0
+                    #beta = 10**beta
+                    #prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
+                    #generated_token = tf.concat([prev_output, H_t[time_index-1]], axis=1)
+                    #sw = switch_t[time_index-1]
+                    #inp = tf.multiply(generated_token, sw) + tf.multiply(gold_token, 1.0-sw)
                     output, state = self.decoder_lstm_cell(inp, state)
 
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder, seed=self.seed)
