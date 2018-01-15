@@ -36,6 +36,6 @@ class Configuration(object):
     #inference = "AC-RNN"
     #inference = "INDP"
     inference = "DIF-SCH"
-    
-    beamsearch = True
+
+    beamsearch = False
     beamsize = 4

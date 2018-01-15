@@ -94,7 +94,8 @@ class NER(object):
         self.schedule_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
         self.coin_probs_placeholder = tf.placeholder(dtype=tf.float32, shape=(None, config.max_sentence_length))
-	self.beta_placeholder = tf.placeholder(dtype=tf.float32, shape=())
+
+        self.beta_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
     def create_feed_dict(
                         self,
@@ -108,7 +109,7 @@ class NER(object):
                         alpha,
                         schedule,
                         coin_probs,
-			beta,
+                        beta,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -131,7 +132,7 @@ class NER(object):
             self.alpha_placeholder: alpha,
             self.schedule_placeholder: schedule,
             self.coin_probs_placeholder: coin_probs,
-	    self.beta_placeholder: beta
+            self.beta_placeholder: beta
             }
 
         if tag_batch is not None:
@@ -583,7 +584,7 @@ class NER(object):
 
         switch = tf.greater(self.coin_probs_placeholder, self.schedule_placeholder)
         switch = tf.cast(switch, dtype=tf.float32)
-	switch_t = tf.transpose(switch, [1,0])
+        switch_t = tf.transpose(switch, [1,0])
 
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         H_t = tf.transpose(H, [1,0,2])
@@ -785,9 +786,7 @@ class NER(object):
                     policy = tf.nn.softmax(pred)
                     Policies.append(policy)
 
-                    #approximating argmax in finding the token with the high probability.
-                    beta = 10**6
-                    prev_output = tf.matmul(tf.nn.softmax(beta * pred), tag_lookup_table)
+                    prev_output = tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(policy, axis=1))
 
             Policies = tf.stack(Policies, axis=1)
             V = tf.stack(V, axis=1)
@@ -795,10 +794,11 @@ class NER(object):
             V = tf.reshape(V, (-1, config.max_sentence_length))
 
             is_true_tag = tf.cast(tf.equal(tf.cast(self.tag_placeholder, tf.int64), tf.argmax(Policies, axis=2)), tf.float32)
-            Rewards = 2 * is_true_tag - 1
+            #hamming loss 0, 1
+            Rewards = is_true_tag
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
             V = tf.multiply(V, self.word_mask_placeholder)
-
+            
             Rewards_t = tf.transpose(Rewards, [1,0])
             V_t = tf.transpose(V, [1,0])
             Returns = []
