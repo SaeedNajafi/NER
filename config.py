@@ -4,9 +4,9 @@ class Configuration(object):
     word_dic_path = './en_data/glove_en_word_100_dic.txt'
     word_vectors_path = './en_data/glove_en_word_100_vectors.txt'
     char_dic_path = './en_data/en_char_dic.txt'
-    train_set_path = './en_data/eng.train.v1'
-    dev_set_path = './en_data/eng.testa.v1'
-    test_set_path = './en_data/eng.testb.v1'
+    train_set_path = './en_data/eng.train.v1.txt'
+    dev_set_path = './en_data/eng.testa.v1.txt'
+    test_set_path = './en_data/eng.testb.v1.txt'
 
     """Model hyperparams and data information"""
     word_embedding_size = 100
@@ -26,7 +26,7 @@ class Configuration(object):
     learning_rate = 0.0005
     max_gradient_norm = 5.
     max_epochs = 64
-    early_stopping = 3
+    early_stopping = 5
     runs=10
     gamma = 0.7
     n_step = 3
@@ -37,5 +37,5 @@ class Configuration(object):
     #inference = "INDP"
     inference = "DIF-SCH"
     
-    beamsearch = False
+    beamsearch = True
     beamsize = 4

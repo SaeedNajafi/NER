@@ -17,6 +17,7 @@ def run_epoch(
             model,
             alpha,
             schedule,
+	    beta,
             session,
             char_X,
             word_length_X,
@@ -53,7 +54,7 @@ def run_epoch(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
-        b_size = sentence_length_X.shape[0]
+        b_size = sentence_length_data.shape[0]
         #flip coin:
         coin_probs = np.random.rand(b_size, config.max_sentence_length)
 
@@ -68,6 +69,7 @@ def run_epoch(
                     alpha=alpha,
                     schedule=schedule,
                     coin_probs=coin_probs,
+		    beta=beta,
                     tag_batch=tag_data
                 )
 
@@ -129,8 +131,7 @@ def predict(
     #dummy value
     alpha = 0.0
     schedule = 1.0
-    b_size = sentence_length_X.shape[0]
-    coin_probs = np.zeros((b_size, config.max_sentence_length))
+    beta = 10**6
 
     losses = []
     results = []
@@ -168,6 +169,8 @@ def predict(
                 sentence_length_data,
                 tag_data) in enumerate(data):
 
+	b_size = sentence_length_data.shape[0]
+    	coin_probs = np.zeros((b_size, config.max_sentence_length))
         feed = model.create_feed_dict(
                     char_input_batch=char_input_data,
                     word_length_batch=word_length_data,
@@ -179,6 +182,7 @@ def predict(
                     alpha=alpha,
                     schedule=schedule,
                     coin_probs=coin_probs,
+		    beta=beta,
                     tag_batch=tag_data
                 )
 
@@ -277,6 +281,7 @@ def run_model():
     #alpha shows how much we care about the reinforcement learning.
     alpha = 0.0
     schedule = 1.0
+    beta = 10**6
     save_epoch = 20
     model_name = config.inference
     for i in range(config.runs):
@@ -301,13 +306,15 @@ def run_model():
                     session.run(tf.variables_initializer(optimizer_scope))
 
                 first_start = time.time()
-                epoch = 0
+                epoch = 1000
                 while (epoch<config.max_epochs):
                     if model_name=='AC-RNN':
                         alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
 
-                    if epoch>20 and model_name=='DIF-SCH':
-                        k = 25.0
+                    if epoch>0 and model_name=='DIF-SCH':
+                        k = 50.0
+			#annealing beta
+			beta = np.minimum(10**6, (1.6)**epoch)
                         #inverse sigmoid decay
                         schedule = float(k)/float(k + np.exp(float(epoch)/k))
 
@@ -319,6 +326,7 @@ def run_model():
                                                             model,
                                                             alpha,
                                                             schedule,
+							    beta,
                                                             session,
                                                             data['train_data']['char_X'],
                                                             data['train_data']['word_length_X'],
@@ -397,7 +405,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "beam.dev.predicted",
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
@@ -425,7 +433,7 @@ def run_model():
                                 config,
                                 predictions,
                                 data['test_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + "beam.test.predicted",
                                 data['test_data']['word_X'],
                                 data['test_data']['Y'],
                                 data['num_to_tag'],

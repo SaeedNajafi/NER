@@ -94,6 +94,7 @@ class NER(object):
         self.schedule_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
         self.coin_probs_placeholder = tf.placeholder(dtype=tf.float32, shape=(None, config.max_sentence_length))
+	self.beta_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
     def create_feed_dict(
                         self,
@@ -107,6 +108,7 @@ class NER(object):
                         alpha,
                         schedule,
                         coin_probs,
+			beta,
                         tag_batch=None
                         ):
         """Creates the feed_dict.
@@ -128,7 +130,8 @@ class NER(object):
             self.dropout_placeholder: dropout_batch,
             self.alpha_placeholder: alpha,
             self.schedule_placeholder: schedule,
-            self.coin_probs_placeholder: coin_probs
+            self.coin_probs_placeholder: coin_probs,
+	    self.beta_placeholder: beta
             }
 
         if tag_batch is not None:
@@ -578,8 +581,9 @@ class NER(object):
         GO_symbol = tf.zeros((b_size, config.tag_embedding_size), dtype=tf.float32)
         GO_context = tf.zeros((b_size, config.word_rnn_hidden_units), dtype=tf.float32)
 
-        switch = tf.greater(self.coin_probs_placeholder, schedule)
-        switch_t = tf.transpose(switch, [1,0])
+        switch = tf.greater(self.coin_probs_placeholder, self.schedule_placeholder)
+        switch = tf.cast(switch, dtype=tf.float32)
+	switch_t = tf.transpose(switch, [1,0])
 
         tag_embeddings_t = tf.transpose(tag_embeddings, [1,0,2])
         H_t = tf.transpose(H, [1,0,2])
@@ -592,21 +596,12 @@ class NER(object):
                     output, state = self.decoder_lstm_cell(inp, initial_state)
                 else:
                     scope.reuse_variables()
-                    def gold_token:
-                        return tf.concat([tag_embeddings_t[time_index-1], H_t[time_index-1]], axis=1)
-                    def generated_token:
-                        beta = 10**4
-                        prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
-                        return tf.concat([prev_output, H_t[time_index-1]], axis=1)
-
-                    sw = switch_t[time_index-1]
-                    inp = tf.cond(sw, generated_token, gold_token)
-                    #beta = -25*(self.schedule_placeholder-0.8) + 6.0
-                    #beta = 10**beta
-                    #prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
-                    #generated_token = tf.concat([prev_output, H_t[time_index-1]], axis=1)
-                    #sw = switch_t[time_index-1]
-                    #inp = tf.multiply(generated_token, sw) + tf.multiply(gold_token, 1.0-sw)
+                    gold_token = tf.concat([tag_embeddings_t[time_index-1], H_t[time_index-1]], axis=1)
+                    beta = self.beta_placeholder
+                    prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
+                    generated_token = tf.concat([prev_output, H_t[time_index-1]], axis=1)
+                    sw = tf.expand_dims(switch_t[time_index-1], axis=1)
+                    inp = tf.multiply(generated_token, sw) + tf.multiply(gold_token, 1.0-sw)
                     output, state = self.decoder_lstm_cell(inp, state)
 
                 output_dropped = tf.nn.dropout(output, self.dropout_placeholder, seed=self.seed)
