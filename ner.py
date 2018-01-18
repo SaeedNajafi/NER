@@ -222,7 +222,7 @@ def predict(
 
             results.append(inner_results)
 
-        elif config.inference=="DIF-SCH" or config.inference=="INDP" or config.inference=="RNN" or config.inference=="AC-RNN":
+        else:
             if np.any(tag_data):
                 feed[model.tag_placeholder] = tag_data
 
@@ -271,8 +271,13 @@ def eval_fscore():
     result_lines = [line.rstrip() for line in codecs.open('temp.score', 'r', 'utf8')]
     return float(result_lines[1].strip().split()[-1])
 
-def run_model():
+def run_model(beam):
     config = Configuration()
+    if beam:
+        config.beamsearch=True
+    else:
+        config.beamsearch=False
+
     data = load_data(config)
     path = "./results"
     if not os.path.exists(path):
@@ -299,19 +304,22 @@ def run_model():
                 best_val_epoch = 0
                 session.run(init)
 
-                if model_name=='AC-RNN':
+                if model_name=='AC-RNN' or model_name=='R-RNN' or model_name=='BR-RNN':
                     save_epoch = -1
                     saver.restore(session, path + '/' + 'RNN' + '.' + str(run) + '/weights')
                     optimizer_scope = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "adam_optimizer")
                     session.run(tf.variables_initializer(optimizer_scope))
 
                 first_start = time.time()
-                epoch = 0
+                if beam:
+                    epoch=10000
+                else:
+                    epoch=0
                 while (epoch<config.max_epochs):
-                    if model_name=='AC-RNN':
-                        alpha = np.minimum(0.95, 0.5 + epoch * 0.05)
+                    if model_name=='AC-RNN' or model_name=='R-RNN' or model_name=='BR-RNN':
+                        alpha = np.minimum(1.0, 0.5 + epoch * 0.05)
 
-                    if epoch>0 and model_name=='DIF-SCH':
+                    if epoch>0 and (model_name=='DIF-SCH' or model_name=='SCH'):
                         k = 50.0
                         #annealing beta
                         beta = np.minimum(10**6, (1.6)**epoch)
@@ -401,11 +409,16 @@ def run_model():
 
                 print 'Total prediction time: {} seconds'.format(time.time() - start)
                 print 'Writing predictions to dev.predicted'
+                if beam:
+                    name = "beam.dev.predicted"
+                else:
+                    name = "dev.predicted"
+
                 save_predictions(
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "dev.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + beam,
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
@@ -429,11 +442,15 @@ def run_model():
 
                 print 'Total prediction time: {} seconds'.format(time.time() - start)
                 print 'Writing predictions to test.predicted'
+                if beam:
+                    name = "beam.test.predicted"
+                else:
+                    name = "test.predicted"
                 save_predictions(
                                 config,
                                 predictions,
                                 data['test_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + "test.predicted",
+                                path + '/' + model_name + '.' + str(run) + '.' + name,
                                 data['test_data']['word_X'],
                                 data['test_data']['Y'],
                                 data['num_to_tag'],
@@ -442,4 +459,5 @@ def run_model():
     return
 
 if __name__ == "__main__":
-    run_model()
+    run_model(False)
+    run_model(True)

@@ -13,7 +13,7 @@ class Configuration(object):
     word_rnn_hidden_units = 128
     char_embedding_size = 32
     char_rnn_hidden_units = 32
-    max_sentence_length = 128
+    max_sentence_length = 150
     max_word_length = 32
     tag_size = 17
     decoder_rnn_hidden_units = 128
@@ -35,7 +35,9 @@ class Configuration(object):
     #inference = "RNN"
     #inference = "AC-RNN"
     #inference = "INDP"
-    inference = "DIF-SCH"
+    #inference = "DIF-SCH"
+    #inference = "SCH"
+    #inference = "R-RNN"
+    #inference = "BR-RNN"
 
-    beamsearch = False
     beamsize = 4

@@ -14,7 +14,7 @@ class NER(object):
         if config.inference=="CRF":
             self.train_by_crf(H, config)
 
-        elif config.inference=="RNN" or config.inference=="AC-RNN":
+        elif config.inference=="R-RNN" or config.inference=="BR-RNN" or config.inference=="RNN" or config.inference=="AC-RNN":
             self.train_by_actor_critic_rnn(H, config)
 
             with tf.variable_scope("V_adam_optimizer"):
@@ -29,7 +29,7 @@ class NER(object):
         elif config.inference=="INDP":
             self.loss, self.outputs = self.train_by_softmax(H, config)
 
-        elif config.inference=="DIF-SCH":
+        elif config.inference=="SCH" or config.inference=="DIF-SCH":
             self.train_by_scheduled_decoder_rnn(H, config)
 
             if not config.beamsearch:
@@ -599,7 +599,11 @@ class NER(object):
                     scope.reuse_variables()
                     gold_token = tf.concat([tag_embeddings_t[time_index-1], H_t[time_index-1]], axis=1)
                     beta = self.beta_placeholder
-                    prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
+                    if config.inference=='DIF-SCH':
+                        prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
+                    else:
+                        prev_output = tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(tf.nn.softmax(logits, axis=1), axis=1))
+
                     generated_token = tf.concat([prev_output, H_t[time_index-1]], axis=1)
                     sw = tf.expand_dims(switch_t[time_index-1], axis=1)
                     inp = tf.multiply(generated_token, sw) + tf.multiply(gold_token, 1.0-sw)
@@ -798,26 +802,43 @@ class NER(object):
             Rewards = is_true_tag
             Rewards = tf.multiply(Rewards, self.word_mask_placeholder)
             V = tf.multiply(V, self.word_mask_placeholder)
-            
+
             Rewards_t = tf.transpose(Rewards, [1,0])
             V_t = tf.transpose(V, [1,0])
-            Returns = []
 
+            TD_Returns = []
             zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
             for t in range(config.max_sentence_length):
                 ret = zeros
-                if t < config.max_sentence_length - config.n_step:
-                    for i in range(config.n_step):
+                for i in range(config.n_step):
+                    if t + i < config.max_sentence_length:
                         ret += (config.gamma ** i) * Rewards_t[t + i]
                         if i == config.n_step - 1:
-                            ret += (config.gamma ** config.n_step) * V_t[t + config.n_step]
+                            if t + i + 1 < config.max_sentence_length:
+                                ret += (config.gamma ** config.n_step) * V_t[t + config.n_step]
+                TD_Returns.append(ret)
 
-                Returns.append(ret)
+            MC_Returns = []
+            zeros = tf.cast(self.sentence_length_placeholder - self.sentence_length_placeholder, tf.float32)
+            for t in range(config.max_sentence_length):
+                ret = zeros
+                for i in range(0, config.max_sentence_length - t):
+                    ret += (config.gamma ** i) * Rewards_t[t + i]
+                MC_Returns.append(ret)
+
+            if config.inference=='AC-RNN':
+                Returns = TD_Returns
+            else:
+                Returns = MC_Returns
 
             Returns = tf.stack(Returns, axis=1)
-
             max_policy = tf.reduce_max(Policies, axis=2)
-            Objective = tf.log(max_policy) * tf.stop_gradient(Returns - V)
+
+            if config.inference=='R-RNN':
+                Objective = tf.log(max_policy) * tf.stop_gradient(Returns)
+            else:
+                Objective = tf.log(max_policy) * tf.stop_gradient(Returns - V)
+
             Objective_masked = tf.multiply(Objective, self.word_mask_placeholder)
 
             V_loss = tf.reduce_mean(tf.pow(tf.stop_gradient(Returns) - V, 2) * self.word_mask_placeholder)
