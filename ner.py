@@ -279,7 +279,7 @@ def run_model(beam):
         config.beamsearch=False
 
     data = load_data(config)
-    path = "./results"
+    path = "./comparison-methods-results"
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -418,7 +418,7 @@ def run_model(beam):
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + beam,
+                                path + '/' + model_name + '.' + str(run) + '.' + neam,
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],
