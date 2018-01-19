@@ -131,7 +131,7 @@ def predict(
     #dummy value
     alpha = 0.0
     schedule = 1.0
-    beta = 10**6
+    beta = 10**8
 
     losses = []
     results = []
@@ -286,7 +286,7 @@ def run_model(beam):
     #alpha shows how much we care about the reinforcement learning.
     alpha = 0.0
     schedule = 1.0
-    beta = 10**6
+    beta = 10**8
     save_epoch = 20
     model_name = config.inference
     for i in range(config.runs):
@@ -322,7 +322,7 @@ def run_model(beam):
                     if epoch>0 and (model_name=='DIF-SCH' or model_name=='SCH'):
                         k = 50.0
                         #annealing beta
-                        beta = np.minimum(10**6, (1.6)**epoch)
+                        beta = np.minimum(10**8, (2)**epoch)
                         #inverse sigmoid decay
                         schedule = float(k)/float(k + np.exp(float(epoch)/k))
 
@@ -418,7 +418,7 @@ def run_model(beam):
                                 config,
                                 predictions,
                                 data['dev_data']['sentence_length_X'],
-                                path + '/' + model_name + '.' + str(run) + '.' + neam,
+                                path + '/' + model_name + '.' + str(run) + '.' + name,
                                 data['dev_data']['word_X'],
                                 data['dev_data']['Y'],
                                 data['num_to_tag'],

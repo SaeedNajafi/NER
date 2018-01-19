@@ -602,7 +602,7 @@ class NER(object):
                     if config.inference=='DIF-SCH':
                         prev_output = tf.matmul(tf.nn.softmax(beta * logits), tag_lookup_table)
                     else:
-                        prev_output = tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(tf.nn.softmax(logits, axis=1), axis=1))
+                        prev_output = tf.nn.embedding_lookup(tag_lookup_table, tf.argmax(tf.nn.softmax(logits), axis=1))
 
                     generated_token = tf.concat([prev_output, H_t[time_index-1]], axis=1)
                     sw = tf.expand_dims(switch_t[time_index-1], axis=1)
